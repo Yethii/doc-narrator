@@ -1,0 +1,30 @@
+import Foundation
+
+struct Paper: Identifiable, Codable, Hashable {
+    let id: UUID
+    var title: String
+    var authors: [String]
+    /// Security-scoped bookmark — persists file access across launches
+    var bookmarkData: Data
+    /// Flat sentence index across all sections (for resume position)
+    var lastReadSentenceIndex: Int
+    var dateAdded: Date
+
+    init(id: UUID = UUID(), title: String, authors: [String] = [],
+         bookmarkData: Data, lastReadSentenceIndex: Int = 0, dateAdded: Date = .now) {
+        self.id = id; self.title = title; self.authors = authors
+        self.bookmarkData = bookmarkData
+        self.lastReadSentenceIndex = lastReadSentenceIndex; self.dateAdded = dateAdded
+    }
+
+    /// Resolves bookmark to URL and starts security scope.
+    /// Caller MUST call url.stopAccessingSecurityScopedResource() when done.
+    func resolveURL() throws -> URL {
+        var isStale = false
+        let url = try URL(resolvingBookmarkData: bookmarkData,
+                          options: .withoutUI, relativeTo: nil,
+                          bookmarkDataIsStale: &isStale)
+        _ = url.startAccessingSecurityScopedResource()
+        return url
+    }
+}

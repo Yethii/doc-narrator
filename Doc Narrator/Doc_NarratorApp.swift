@@ -6,9 +6,23 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 @main
 struct Doc_NarratorApp: App {
+    init() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .playback,
+                mode: .spokenAudio,
+                options: [.duckOthers]
+            )
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("AudioSession error: \(error)")
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
