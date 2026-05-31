@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import MediaPlayer
 import PDFKit
+import NaturalLanguage
 
 enum ReaderState: Equatable {
     case idle, processing, ready, playing, paused
@@ -42,6 +43,13 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     var paper: Paper
     private(set) var engine: any TTSEngine
     private var sectionPauseTask: Task<Void, Never>?
+
+    // Ad-hoc "read this text aloud" path (e.g. an LLM summary), separate from the
+    // document reading loop. Uses a high index base so finish callbacks don't collide.
+    private static let auxIndexBase = 1_000_000
+    private var auxSentences: [String] = []
+    private var auxIndex = 0
+    private(set) var isReadingAux = false
 
     /// Total speakable (non-header) sentences in the document.
     var totalSentences: Int {
@@ -146,6 +154,53 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         speakCurrentSentence()
     }
 
+    // MARK: - Read arbitrary text aloud (summaries, answers, explanations)
+
+    /// Stop document playback and read `text` aloud through the current engine.
+    func readAloud(_ text: String) {
+        engine.stop(); sectionPauseTask?.cancel()
+        auxSentences = Self.splitSentences(text)
+        guard !auxSentences.isEmpty else { return }
+        auxIndex = 0; isReadingAux = true
+        state = .playing
+        isBuffering = true
+        PlaybackCoordinator.shared.updateNowPlaying(title: paper.title,
+                                                    author: paper.authors.first ?? "", isPlaying: true)
+        engine.speak(sentence: auxSentences[0], at: Self.auxIndexBase, rate: settings.rate)
+    }
+
+    /// Stop ad-hoc read-aloud (e.g. when the summary sheet is dismissed).
+    func stopReadAloud() {
+        guard isReadingAux else { return }
+        engine.stop(); isReadingAux = false; isBuffering = false; state = .ready
+        PlaybackCoordinator.shared.updateNowPlaying(title: paper.title,
+                                                    author: paper.authors.first ?? "", isPlaying: false)
+    }
+
+    private func speakAux() {
+        guard isReadingAux, auxIndex < auxSentences.count else { return }
+        isBuffering = true
+        engine.speak(sentence: auxSentences[auxIndex], at: Self.auxIndexBase + auxIndex, rate: settings.rate)
+    }
+
+    private static func splitSentences(_ text: String) -> [String] {
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        var out: [String] = []
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let s = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !s.isEmpty { out.append(s) }
+            return true
+        }
+        return out
+    }
+
+    /// Persist an LLM-generated summary on the paper.
+    func cacheSummary(_ text: String) {
+        paper.cachedSummary = text
+        LibraryStore.shared.update(paper: paper)
+    }
+
     /// Scrub to a fraction (0...1) of the document and start reading from there.
     func seek(toFraction f: Double) {
         let total = totalSentences
@@ -238,6 +293,21 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     }
 
     private func handleSentenceFinished(finishedIndex: Int) {
+        // Ad-hoc read-aloud (summary/answer/explanation) has its own index space.
+        if isReadingAux {
+            guard finishedIndex >= Self.auxIndexBase else { return }   // stale doc finish
+            let idx = finishedIndex - Self.auxIndexBase
+            guard idx == auxIndex else { return }                     // stale aux finish
+            auxIndex += 1
+            if auxIndex < auxSentences.count {
+                speakAux()
+            } else {
+                isReadingAux = false; isBuffering = false; state = .ready
+                PlaybackCoordinator.shared.updateNowPlaying(title: paper.title,
+                                                            author: paper.authors.first ?? "", isPlaying: false)
+            }
+            return
+        }
         guard state == .playing, currentSectionIndex < sections.count else { return }
         // Ignore stale finishes: when the user jumps/seeks mid-sentence, the engine
         // (esp. AVSpeech, which finishes on a background thread) can deliver a

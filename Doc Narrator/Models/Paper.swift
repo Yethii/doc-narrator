@@ -10,14 +10,18 @@ struct Paper: Identifiable, Codable, Hashable {
     var dateAdded: Date
     /// true = we own a copy in Documents (delete on remove); false = in-place bookmark
     var isLocalCopy: Bool
+    /// Cached LLM-generated summary (Markdown); nil until first generated.
+    var cachedSummary: String?
 
     init(id: UUID = UUID(), title: String, authors: [String] = [],
          bookmarkData: Data, lastReadSentenceIndex: Int = 0,
-         dateAdded: Date = .now, isLocalCopy: Bool = true) {
+         dateAdded: Date = .now, isLocalCopy: Bool = true,
+         cachedSummary: String? = nil) {
         self.id = id; self.title = title; self.authors = authors
         self.bookmarkData = bookmarkData
         self.lastReadSentenceIndex = lastReadSentenceIndex
         self.dateAdded = dateAdded; self.isLocalCopy = isLocalCopy
+        self.cachedSummary = cachedSummary
     }
 
     /// Resolves bookmark to URL and starts security scope.

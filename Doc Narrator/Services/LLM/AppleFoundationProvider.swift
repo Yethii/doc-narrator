@@ -38,11 +38,20 @@ final class AppleFoundationProvider: LLMProvider {
                     do {
                         let session = LanguageModelSession(instructions: request.system)
                         let options = GenerationOptions(temperature: request.temperature)
-                        // Phase 0: single-shot response. True token streaming is added in
-                        // Phase 1 where summary latency matters.
-                        let response = try await session.respond(to: request.user, options: options)
-                        try Task.checkCancellation()
-                        continuation.yield(response.content)
+                        // Stream cumulative snapshots; emit only the new delta each time.
+                        var previous = ""
+                        for try await partial in session.streamResponse(to: request.user, options: options) {
+                            try Task.checkCancellation()
+                            let snapshot = partial.content
+                            if snapshot.hasPrefix(previous) {
+                                let delta = String(snapshot.dropFirst(previous.count))
+                                if !delta.isEmpty { continuation.yield(delta) }
+                            } else {
+                                // Snapshot diverged (rare) — replay the whole thing.
+                                continuation.yield(snapshot)
+                            }
+                            previous = snapshot
+                        }
                         continuation.finish()
                     } catch is CancellationError {
                         continuation.finish(throwing: LLMError.cancelled)

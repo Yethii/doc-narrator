@@ -5,6 +5,7 @@ struct ReaderView: View {
     @StateObject private var vm: ReaderViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var locateTrigger = 0
+    @State private var showSummary = false
 
     init(paper: Paper) {
         self.paper = paper
@@ -30,11 +31,20 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button { showSummary = true } label: {
+                    Image(systemName: "sparkles")
+                }
+                .disabled(vm.sections.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { locateTrigger += 1 } label: {
                     Image(systemName: "location.fill")
                 }
                 .disabled(vm.pdfDocument == nil)
             }
+        }
+        .sheet(isPresented: $showSummary) {
+            SummaryView(vm: vm)
         }
         .task { await vm.load() }
         .overlay {
