@@ -5,6 +5,11 @@ struct PlayerControlsView: View {
     @State private var scrubValue: Double = 0
     @State private var scrubbing = false
 
+    // Display the rate (0...1) as a speech-speed multiplier (0.5×–1.5×, 1× = normal).
+    private var speedLabel: String {
+        String(format: "%g×", 0.5 + Double(vm.settings.rate))
+    }
+
     // 1-based sentence number for the current scrubber position.
     private var currentScrubSentence: Int {
         let total = vm.totalSentences
@@ -44,6 +49,10 @@ struct PlayerControlsView: View {
                 Image(systemName: "tortoise.fill").foregroundStyle(.secondary)
                 Slider(value: $vm.settings.rate, in: 0...1, step: 0.05)
                 Image(systemName: "hare.fill").foregroundStyle(.secondary)
+                Text(speedLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
             }
             .padding(.horizontal)
 
