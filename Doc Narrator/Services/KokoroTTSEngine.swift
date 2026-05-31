@@ -110,7 +110,7 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
             currentTask = Task { [weak self] in
                 guard let self else { return }
                 let data = await capturedJob.value   // wait for synthesis → returns Data?
-                guard !Task.isCancelled else { self.isSpeaking = false; return }
+                guard !Task.isCancelled, !self.isPaused else { self.isSpeaking = false; return }
                 await self.playOrSkip(data: data)
             }
         } else {
@@ -164,12 +164,14 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
         }
         guard !Task.isCancelled else { return }
         let data = await synth.synthesize(text: text, voiceID: voiceID, speed: speed)
-        guard !Task.isCancelled else { isSpeaking = false; return }
+        guard !Task.isCancelled, !isPaused else { isSpeaking = false; return }
         await playOrSkip(data: data)
     }
 
     @MainActor
     private func playOrSkip(data: Data?) async {
+        // Synthesis can outlive a pause() call — bail out so we don't auto-restart.
+        guard !isPaused else { isSpeaking = false; return }
         guard let data else {
             log.warning("Skipping sentence \(self.currentIndex) — no audio")
             isSpeaking = false
