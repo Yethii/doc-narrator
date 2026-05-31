@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import MediaPlayer
+import PDFKit
 
 enum ReaderState: Equatable {
     case idle, processing, ready, playing, paused
@@ -12,6 +13,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
 
     @Published var state: ReaderState = .idle
     @Published var sections: [PaperSection] = []
+    @Published var pdfDocument: PDFDocument?
     @Published var currentSectionIndex: Int = 0
     @Published var currentSentenceIndex: Int = 0
     @Published var settings: TTSSettings {
@@ -70,6 +72,8 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         do {
             let url = try paper.resolveURL()
             defer { url.stopAccessingSecurityScopedResource() }
+            // Load PDFDocument while the security scope is open
+            pdfDocument = PDFDocument(url: url)
             let (_, pages) = try PDFProcessor.extractPages(from: url)
             let headers = PDFProcessor.detectRunningHeaders(pages: pages)
             sections = TextCleaner.clean(pages: pages, runningHeaders: headers)
