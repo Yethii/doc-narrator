@@ -28,6 +28,7 @@ final class LibraryStore: ObservableObject {
             try? FileManager.default.removeItem(at: url)
             url.stopAccessingSecurityScopedResource()
         }
+        SessionStore.deleteAll(for: paper.id)   // drop saved summaries/chats too
         papers.removeAll { $0.id == paper.id }; save()
     }
 

@@ -50,12 +50,11 @@ struct NarratableTextView: View {
                     Text("•").foregroundStyle(.secondary)
                     Text(seg.text)
                 }
-                .font(.body)
+                .readingStyle()
             case .body:
-                Text(seg.text).font(.body)
+                Text(seg.text).readingStyle()
             }
         }
-        .lineSpacing(5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(

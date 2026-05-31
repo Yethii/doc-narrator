@@ -21,6 +21,9 @@ final class LLMService: ObservableObject {
     /// True when an intelligence feature can run right now.
     var isReady: Bool { if case .available = status { return true }; return false }
 
+    /// Human-readable label of the active model (recorded on saved artifacts).
+    var currentModelLabel: String { settings.providerType.rawValue }
+
     var statusText: String {
         switch status {
         case .available:            return "Ready"
@@ -74,7 +77,27 @@ final class LLMService: ObservableObject {
 
     // MARK: - Summarize (map-reduce so long papers fit the model's context window)
 
+    /// General reader-facing summary of the whole paper.
     func summarize(sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
+        summarizeCore(sections: sections, reduceSystem: Self.reduceSystem)
+    }
+
+    /// Summary focused on a topic: retrieve the most relevant sections, then summarize those
+    /// with a topic-aware prompt. Falls back to the whole paper if retrieval finds nothing.
+    func focusedSummary(topic: String, sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
+        let picked = Retriever.topSections(for: topic, in: sections, k: 6)
+        let source = picked.isEmpty ? sections : picked
+        let reduce =
+            "You are answering a reader's request to summarize what a document says about a " +
+            "specific topic: \"\(topic)\". Using Markdown, output a **TL;DR** (2–3 sentences) " +
+            "focused on that topic, then **Key points** as 3–6 bullets. If the document barely " +
+            "covers the topic, say so plainly. Be faithful to the source; do not invent details."
+        return summarizeCore(sections: source, reduceSystem: reduce)
+    }
+
+    /// Shared map-reduce engine so long inputs fit the model's context window.
+    private func summarizeCore(sections: [PaperSection],
+                               reduceSystem: String) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             guard provider != nil else {
                 continuation.finish(throwing: LLMError.unavailable(statusText)); return
@@ -85,9 +108,8 @@ final class LLMService: ObservableObject {
             }
             let task = Task {
                 do {
-                    // Short doc (one chunk): summarize the text directly.
                     if chunks.count == 1 {
-                        for try await delta in self.stream(system: Self.reduceSystem, user: chunks[0],
+                        for try await delta in self.stream(system: reduceSystem, user: chunks[0],
                                                            maxTokens: 450, temperature: 0.3) {
                             continuation.yield(delta)
                         }
@@ -101,8 +123,7 @@ final class LLMService: ObservableObject {
                                                            maxTokens: 160, temperature: 0.2)
                         summaries.append(part)
                     }
-                    // FOLD: if the combined summaries are still too big for one pass,
-                    // re-summarize them in groups until they fit.
+                    // FOLD: re-summarize in groups until the combined text fits one reduce pass.
                     while Self.combinedLength(summaries) > Self.foldCharBudget && summaries.count > 1 {
                         var folded: [String] = []
                         for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
@@ -113,8 +134,8 @@ final class LLMService: ObservableObject {
                         summaries = folded
                     }
                     // REDUCE: stream the final reader-facing summary.
-                    let reduceInput = summaries.joined(separator: "\n\n")
-                    for try await delta in self.stream(system: Self.reduceSystem, user: reduceInput,
+                    for try await delta in self.stream(system: reduceSystem,
+                                                       user: summaries.joined(separator: "\n\n"),
                                                        maxTokens: 450, temperature: 0.3) {
                         continuation.yield(delta)
                     }

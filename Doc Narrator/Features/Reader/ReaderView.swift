@@ -5,7 +5,7 @@ struct ReaderView: View {
     @StateObject private var vm: ReaderViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var locateTrigger = 0
-    @State private var showSummary = false
+    @State private var showIntelligence = false
 
     init(paper: Paper) {
         self.paper = paper
@@ -31,7 +31,7 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showSummary = true } label: {
+                Button { showIntelligence = true } label: {
                     Image(systemName: "sparkles")
                 }
                 .disabled(vm.sections.isEmpty)
@@ -43,8 +43,8 @@ struct ReaderView: View {
                 .disabled(vm.pdfDocument == nil)
             }
         }
-        .sheet(isPresented: $showSummary) {
-            SummaryView(vm: vm)
+        .navigationDestination(isPresented: $showIntelligence) {
+            IntelligenceHomeView(vm: vm)
         }
         .task { await vm.load() }
         .overlay {

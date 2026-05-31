@@ -1,0 +1,103 @@
+import SwiftUI
+
+/// The persistent AI workspace for a paper: summaries (general + custom), and (Phase D) chats.
+/// Pushed from the reader's ✨ button; back arrow returns to the document.
+struct IntelligenceHomeView: View {
+    @ObservedObject var vm: ReaderViewModel
+    @ObservedObject private var llm = LLMService.shared
+
+    @State private var sessions = PaperSessions()
+    @State private var askTopic = false
+    @State private var topicText = ""
+    @State private var customTopic: String?      // drives navigation to a custom summary
+
+    var body: some View {
+        List {
+            if !llm.isReady {
+                Section {
+                    Label(llm.statusText, systemImage: "exclamationmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Summaries") {
+                ForEach(sessions.summaries) { artifact in
+                    NavigationLink {
+                        SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .existing(artifact))
+                    } label: {
+                        summaryRow(artifact)
+                    }
+                }
+                .onDelete(perform: deleteSummaries)
+
+                NavigationLink {
+                    SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .generateGeneral)
+                } label: {
+                    Label("New general summary", systemImage: "sparkles")
+                }
+                .disabled(!llm.isReady)
+
+                Button { topicText = ""; askTopic = true } label: {
+                    Label("Summarize a topic…", systemImage: "text.magnifyingglass")
+                }
+                .disabled(!llm.isReady)
+            }
+
+            Section("Chat") {
+                Label("Chat with PDF — coming soon", systemImage: "bubble.left.and.bubble.right")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Label("Podcast — coming soon", systemImage: "waveform")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Intelligence")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: reload)
+        .alert("Summarize a topic", isPresented: $askTopic) {
+            TextField("e.g. the evaluation method", text: $topicText)
+            Button("Cancel", role: .cancel) {}
+            Button("Summarize") {
+                let t = topicText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { customTopic = t }
+            }
+        } message: {
+            Text("What should the summary focus on?")
+        }
+        .navigationDestination(item: $customTopic) { topic in
+            SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .generateCustom(topic))
+        }
+    }
+
+    private func summaryRow(_ a: SummaryArtifact) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(a.title).font(.headline).lineLimit(1)
+            Text("\(a.modelLabel) · \(a.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func reload() {
+        sessions = SessionStore.sessions(for: vm.paper.id)
+        // One-time migration: fold a previously cached summary into a saved artifact.
+        if sessions.summaries.isEmpty, let cached = vm.paper.cachedSummary, !cached.isEmpty {
+            let a = SummaryArtifact(paperID: vm.paper.id, kind: .general,
+                                    modelLabel: "Apple (built-in)", markdown: cached)
+            SessionStore.addSummary(a)
+            sessions = SessionStore.sessions(for: vm.paper.id)
+        }
+    }
+
+    private func deleteSummaries(_ offsets: IndexSet) {
+        for i in offsets { SessionStore.deleteSummary(id: sessions.summaries[i].id, paperID: vm.paper.id) }
+        reload()
+    }
+}
+
+// Allow a plain String to drive `.navigationDestination(item:)`.
+extension String: @retroactive Identifiable {
+    public var id: String { self }
+}
