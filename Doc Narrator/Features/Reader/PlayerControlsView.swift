@@ -2,9 +2,30 @@ import SwiftUI
 
 struct PlayerControlsView: View {
     @ObservedObject var vm: ReaderViewModel
+    @State private var scrubValue: Double = 0
+    @State private var scrubbing = false
 
     var body: some View {
         VStack(spacing: 16) {
+            // Progress scrubber — drag to skip to any point and start reading there.
+            VStack(spacing: 2) {
+                Slider(value: $scrubValue, in: 0...1) { editing in
+                    scrubbing = editing
+                    if !editing { vm.seek(toFraction: scrubValue) }
+                }
+                .disabled(vm.totalSentences == 0)
+                HStack {
+                    Text("\(min(vm.globalSentenceIndex + 1, max(vm.totalSentences, 1)))")
+                    Spacer()
+                    Text("\(vm.totalSentences) sentences")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .onAppear { scrubValue = vm.progress }
+            .onChange(of: vm.progress) { _, new in if !scrubbing { scrubValue = new } }
+
             // Speed control
             HStack(spacing: 8) {
                 Image(systemName: "tortoise.fill").foregroundStyle(.secondary)

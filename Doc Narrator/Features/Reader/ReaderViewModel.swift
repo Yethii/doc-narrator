@@ -16,6 +16,10 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     @Published var pdfDocument: PDFDocument?
     @Published var currentSectionIndex: Int = 0
     @Published var currentSentenceIndex: Int = 0
+    /// True while a sentence is being synthesized but audio hasn't started yet.
+    @Published var isBuffering: Bool = false
+    /// Flat index across all non-header sentences (drives the progress scrubber).
+    @Published private(set) var globalSentenceIndex: Int = 0
     @Published var settings: TTSSettings {
         didSet {
             // Only rebuild the engine when the engine type or OpenAI voice/model changes.
@@ -36,8 +40,19 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
 
     var paper: Paper
     private(set) var engine: any TTSEngine
-    private var globalSentenceIndex: Int = 0
     private var sectionPauseTask: Task<Void, Never>?
+
+    /// Total speakable (non-header) sentences in the document.
+    var totalSentences: Int {
+        sections.reduce(0) { $0 + ($1.type == .sectionHeader ? 0 : $1.sentences.count) }
+    }
+
+    /// 0...1 reading progress through the document.
+    var progress: Double {
+        let total = totalSentences
+        guard total > 1 else { return 0 }
+        return min(1, max(0, Double(globalSentenceIndex) / Double(total - 1)))
+    }
 
     init(paper: Paper, settings: TTSSettings) {
         self.paper = paper
@@ -95,12 +110,12 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
 
     func pause() {
         guard state == .playing else { return }
-        engine.pause(); sectionPauseTask?.cancel(); state = .paused
+        engine.pause(); sectionPauseTask?.cancel(); state = .paused; isBuffering = false
         PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
     func stop() {
-        engine.stop(); sectionPauseTask?.cancel(); state = .ready
+        engine.stop(); sectionPauseTask?.cancel(); state = .ready; isBuffering = false
         PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
@@ -128,6 +143,28 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         speakCurrentSentence()
     }
 
+    /// Scrub to a fraction (0...1) of the document and start reading from there.
+    func seek(toFraction f: Double) {
+        let total = totalSentences
+        guard total > 0 else { return }
+        let target = min(total - 1, max(0, Int((f * Double(total - 1)).rounded())))
+        guard let (si, sj) = sectionSentence(forFlat: target) else { return }
+        jumpTo(sectionIndex: si, sentenceIndex: sj)
+    }
+
+    /// Map a flat (non-header) sentence index back to its section/sentence position.
+    private func sectionSentence(forFlat flatIndex: Int) -> (Int, Int)? {
+        var count = 0
+        for (si, section) in sections.enumerated() {
+            if section.type == .sectionHeader { continue }
+            for sj in section.sentences.indices {
+                if count == flatIndex { return (si, sj) }
+                count += 1
+            }
+        }
+        return nil
+    }
+
     func skipToPreviousSection() {
         engine.stop(); sectionPauseTask?.cancel()
         if currentSentenceIndex > 0 {
@@ -146,6 +183,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
 
         if section.type == .sectionHeader {
             if let ann = section.announcement {
+                isBuffering = true
                 engine.speak(sentence: ann, at: globalSentenceIndex, rate: settings.rate * 0.9)
                 // Don't prefetch across section boundaries — too complex to index correctly.
             } else {
@@ -157,6 +195,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         guard currentSentenceIndex < section.sentences.count else {
             advanceAfterSection(); return
         }
+        isBuffering = true
         engine.speak(sentence: section.sentences[currentSentenceIndex],
                      at: globalSentenceIndex, rate: settings.rate)
         prefetchNextSentence()
@@ -188,6 +227,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     nonisolated func engineDidBeginPlaying(_ engine: any TTSEngine) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.isBuffering = false   // audio actually started → switch highlight to "playing"
             PlaybackCoordinator.shared.updateNowPlaying(title: paper.title,
                                             author: paper.authors.first ?? "",
                                             isPlaying: true)

@@ -38,11 +38,19 @@ struct PDFReaderView: UIViewRepresentable {
 
         let si = vm.currentSectionIndex
         let sj = vm.currentSentenceIndex
-        guard si != c.lastSI || sj != c.lastSJ || locateTrigger != c.lastTrigger else { return }
-        c.lastSI = si; c.lastSJ = sj; c.lastTrigger = locateTrigger
-        let sections = vm.sections
-        c.highlightCurrentSentence(pdfView: pdfView, document: document,
-                                   sections: sections, si: si, sj: sj)
+        let buffering = vm.isBuffering
+        let sentenceChanged = si != c.lastSI || sj != c.lastSJ || locateTrigger != c.lastTrigger
+        let bufferingChanged = buffering != c.lastBuffering
+        c.lastBuffering = buffering
+
+        if sentenceChanged {
+            c.lastSI = si; c.lastSJ = sj; c.lastTrigger = locateTrigger
+            c.highlightCurrentSentence(pdfView: pdfView, document: document,
+                                       sections: vm.sections, si: si, sj: sj, buffering: buffering)
+        } else if bufferingChanged {
+            // Same sentence, synthesis→playback transition: just swap the color.
+            c.recolor(document: document, buffering: buffering)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(vm: vm) }
@@ -54,6 +62,7 @@ struct PDFReaderView: UIViewRepresentable {
         weak var pdfView: PDFView?
         weak var jumpTap: UITapGestureRecognizer?
         var lastSI = -1, lastSJ = -1, lastTrigger = -1
+        var lastBuffering = false
         private let tag = "tts_hl"
         private var highlightGeneration = 0
 
@@ -130,7 +139,7 @@ struct PDFReaderView: UIViewRepresentable {
         // MARK: Highlight + scroll
 
         func highlightCurrentSentence(pdfView: PDFView, document: PDFDocument,
-                                       sections: [PaperSection], si: Int, sj: Int) {
+                                       sections: [PaperSection], si: Int, sj: Int, buffering: Bool) {
             guard si < sections.count else { return }
             let section = sections[si]
             guard sj < section.sentences.count else { return }
@@ -147,9 +156,24 @@ struct PDFReaderView: UIViewRepresentable {
 
                 DispatchQueue.main.async {
                     guard self.highlightGeneration == gen else { return }
-                    self.applyHighlight(pdfView: pdfView, document: document, selection: selection)
+                    self.applyHighlight(pdfView: pdfView, document: document,
+                                        selection: selection, buffering: buffering)
                 }
             }
+        }
+
+        func recolor(document: PDFDocument, buffering: Bool) {
+            let col = highlightColor(buffering: buffering)
+            for i in 0..<document.pageCount {
+                document.page(at: i)?.annotations
+                    .filter { $0.userName == tag }
+                    .forEach { $0.color = col }
+            }
+        }
+
+        private func highlightColor(buffering: Bool) -> UIColor {
+            buffering ? UIColor.systemOrange.withAlphaComponent(0.55)
+                      : UIColor.systemYellow.withAlphaComponent(0.6)
         }
 
         /// Locate the sentence's page, then span from its start anchor to its end anchor.
@@ -236,16 +260,18 @@ struct PDFReaderView: UIViewRepresentable {
             }.map(Character.init))
         }
 
-        private func applyHighlight(pdfView: PDFView, document: PDFDocument, selection: PDFSelection?) {
+        private func applyHighlight(pdfView: PDFView, document: PDFDocument,
+                                    selection: PDFSelection?, buffering: Bool) {
             for i in 0..<document.pageCount {
                 guard let page = document.page(at: i) else { continue }
                 page.annotations.filter { $0.userName == tag }.forEach { page.removeAnnotation($0) }
             }
             guard let sel = selection else { return }
+            let col = highlightColor(buffering: buffering)
             for line in sel.selectionsByLine() {
                 guard let page = line.pages.first else { continue }
                 let ann = PDFAnnotation(bounds: line.bounds(for: page), forType: .highlight, withProperties: nil)
-                ann.color = UIColor.systemYellow.withAlphaComponent(0.6)
+                ann.color = col
                 ann.userName = tag
                 page.addAnnotation(ann)
             }
