@@ -7,11 +7,21 @@ final class SystemTTSEngine: NSObject, TTSEngine {
     private(set) var isSpeaking = false
     private(set) var isPaused = false
     /// Selected AVSpeechSynthesisVoice.identifier; empty = best available en-US.
-    var voiceIdentifier: String = ""
+    var voiceIdentifier: String = "" {
+        didSet { if voiceIdentifier != oldValue { cachedVoice = nil } }
+    }
+    private var cachedVoice: AVSpeechSynthesisVoice?
 
     override init() {
         super.init()
         synthesizer.delegate = self
+    }
+
+    private func resolvedVoice() -> AVSpeechSynthesisVoice? {
+        if let v = cachedVoice { return v }
+        let v = SystemTTSEngine.bestVoice(preferring: voiceIdentifier)
+        cachedVoice = v
+        return v
     }
 
     /// The chosen voice if given, otherwise the best available en-US voice
@@ -32,7 +42,7 @@ final class SystemTTSEngine: NSObject, TTSEngine {
     func speak(sentence: String, at index: Int, rate: Float) {
         currentIndex = index
         let utterance = AVSpeechUtterance(string: sentence)
-        utterance.voice = SystemTTSEngine.bestVoice(preferring: voiceIdentifier)
+        utterance.voice = resolvedVoice()
         // Map 0–1 to AVSpeechUtteranceMinimumSpeechRate...Maximum
         let min = AVSpeechUtteranceMinimumSpeechRate
         let max = AVSpeechUtteranceMaximumSpeechRate
@@ -48,6 +58,15 @@ final class SystemTTSEngine: NSObject, TTSEngine {
 }
 
 extension SystemTTSEngine: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                            didStart utterance: AVSpeechUtterance) {
+        // Audio actually began — clear the buffering/loading indicator.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            delegate?.engineDidBeginPlaying(self)
+        }
+    }
+
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
                             didFinish utterance: AVSpeechUtterance) {
         isSpeaking = false
