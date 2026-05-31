@@ -9,6 +9,15 @@ the current sentence, following along with Control Center and lock-screen contro
 letting you double-tap any sentence to start from there. With the on-device voice, none of
 this requires a network connection or an account.
 
+> **🤖 Using an AI coding agent (Claude Code, Cursor, etc.)?**
+> You don't need to write any code or figure out the setup yourself. Just tell your agent:
+> **"Read `AGENTS.md` in this repo and set up Doc Narrator on my machine."**
+> [`AGENTS.md`](AGENTS.md) is a complete, step-by-step guide written for coding agents — it
+> walks the agent through installing the toolchain, fetching the model, building, and
+> installing the app on your iPhone/iPad, and tells it to guide you through the few steps only
+> a human can do (Apple ID sign-in, trusting the app on your device) and through opening your
+> first PDF.
+
 ---
 
 ## Why it exists
@@ -172,6 +181,9 @@ GitHub's file-size limit and are not redistributed here.
 
 ## License
 
-The bundled Kokoro assets are distributed under the Apache License 2.0 (see
-`Doc Narrator/kokoro/LICENSE`). Add a license for the application code as appropriate before
-public distribution.
+The application source code is released under the **MIT License** — see [`LICENSE`](LICENSE).
+You're free to use, modify, and distribute it, including commercially.
+
+The bundled Kokoro text-to-speech assets in `Doc Narrator/kokoro/` are distributed under the
+Apache License 2.0 (see `Doc Narrator/kokoro/LICENSE`) and are governed by that license
+independently of the application code.
