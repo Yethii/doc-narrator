@@ -11,6 +11,10 @@ import AVFoundation
 @main
 struct Doc_NarratorApp: App {
     init() {
+        // Touch the shared Kokoro engine now so its 17 MB ONNX model loads in the
+        // background while the user browses the library, not when they tap Play.
+        _ = KokoroTTSEngine.shared
+
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,

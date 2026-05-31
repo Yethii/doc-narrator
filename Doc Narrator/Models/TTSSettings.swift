@@ -1,8 +1,9 @@
 import Foundation
 
 enum TTSEngineType: String, Codable, CaseIterable {
-    case system = "On-Device"
+    case kokoro = "Kokoro (Local)"
     case openAI = "OpenAI (Cloud)"
+    case system = "System Voice"
 }
 
 enum OpenAIVoice: String, Codable, CaseIterable {
@@ -10,7 +11,7 @@ enum OpenAIVoice: String, Codable, CaseIterable {
 }
 
 struct TTSSettings: Codable {
-    var engineType: TTSEngineType = .system
+    var engineType: TTSEngineType = .kokoro
     /// AVSpeechSynthesisVoice.identifier; empty = best available en-US
     var systemVoiceIdentifier: String = ""
     /// 0.0–1.0; mapped to AVSpeechUtteranceMinimumSpeechRate...Maximum

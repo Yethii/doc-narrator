@@ -14,7 +14,16 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     @Published var currentSectionIndex: Int = 0
     @Published var currentSentenceIndex: Int = 0
     @Published var settings: TTSSettings {
-        didSet { reconfigureEngine() }
+        didSet {
+            // Only rebuild the engine when the engine type or OpenAI voice/model changes.
+            // Rate and other display-only settings take effect on the next sentence via
+            // settings.rate at call time — recreating here would free the C pointer while
+            // a synthesis Task.detached is still running (use-after-free crash).
+            guard oldValue.engineType != settings.engineType
+                    || oldValue.openAIVoice != settings.openAIVoice
+                    || oldValue.openAIModel != settings.openAIModel else { return }
+            reconfigureEngine()
+        }
     }
 
     var paper: Paper
@@ -34,6 +43,8 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     private func reconfigureEngine() {
         engine.stop()
         switch settings.engineType {
+        case .kokoro:
+            let e = KokoroTTSEngine.shared; e.delegate = self; engine = e
         case .system:
             let e = SystemTTSEngine(); e.delegate = self; engine = e
         case .openAI:
@@ -101,6 +112,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         if section.type == .sectionHeader {
             if let ann = section.announcement {
                 engine.speak(sentence: ann, at: globalSentenceIndex, rate: settings.rate * 0.9)
+                // Don't prefetch across section boundaries — too complex to index correctly.
             } else {
                 advanceToNextSection(); speakCurrentSentence()
             }
@@ -112,6 +124,20 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         }
         engine.speak(sentence: section.sentences[currentSentenceIndex],
                      at: globalSentenceIndex, rate: settings.rate)
+        prefetchNextSentence()
+    }
+
+    // Kick off background synthesis for the next sentence so it's ready when needed.
+    // Only prefetches within the same body section; cross-section lookahead skipped.
+    private func prefetchNextSentence() {
+        guard currentSectionIndex < sections.count else { return }
+        let section = sections[currentSectionIndex]
+        guard section.type == .body || section.type == .abstract else { return }
+        let nextSj = currentSentenceIndex + 1
+        guard nextSj < section.sentences.count else { return }
+        engine.prefetch(sentence: section.sentences[nextSj],
+                        at: globalSentenceIndex + 1,
+                        rate: settings.rate)
     }
 
     // MARK: - TTSEngineDelegate

@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CD5A7AED844F717B78973CCA /* onnxruntime.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */; };
+		DD8858D0E4C1539B2E1424F4 /* sherpa-onnx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */; };
+		DE60E273C976E13C12AD0E2D /* kokoro in Resources */ = {isa = PBXBuildFile; fileRef = 55C1424D174DA4E1C1C60C47 /* kokoro */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		3172F8492FCBAD4500BDA198 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,24 +30,33 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx.xcframework"; path = "sherpa-onnx.xcframework"; sourceTree = SOURCE_ROOT; };
 		3172F83B2FCBAD4400BDA198 /* Doc Narrator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Doc Narrator.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8482FCBAD4500BDA198 /* Doc NarratorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8522FCBAD4500BDA198 /* Doc NarratorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		55C1424D174DA4E1C1C60C47 /* kokoro */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = kokoro; path = "Doc Narrator/kokoro"; sourceTree = SOURCE_ROOT; };
+		8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = onnxruntime.xcframework; path = onnxruntime.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3172F83D2FCBAD4400BDA198 /* Doc Narrator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Doc Narrator";
 			sourceTree = "<group>";
 		};
 		3172F84B2FCBAD4500BDA198 /* Doc NarratorTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Doc NarratorTests";
 			sourceTree = "<group>";
 		};
 		3172F8552FCBAD4500BDA198 /* Doc NarratorUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Doc NarratorUITests";
 			sourceTree = "<group>";
 		};
@@ -52,6 +67,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD8858D0E4C1539B2E1424F4 /* sherpa-onnx.xcframework in Frameworks */,
+				CD5A7AED844F717B78973CCA /* onnxruntime.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,6 +96,8 @@
 				3172F84B2FCBAD4500BDA198 /* Doc NarratorTests */,
 				3172F8552FCBAD4500BDA198 /* Doc NarratorUITests */,
 				3172F83C2FCBAD4400BDA198 /* Products */,
+				4DFED3C05C94CE8F9B11A2AB /* Frameworks */,
+				55C1424D174DA4E1C1C60C47 /* kokoro */,
 			);
 			sourceTree = "<group>";
 		};
@@ -90,6 +109,15 @@
 				3172F8522FCBAD4500BDA198 /* Doc NarratorUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		4DFED3C05C94CE8F9B11A2AB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */,
+				8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -111,8 +139,6 @@
 				3172F83D2FCBAD4400BDA198 /* Doc Narrator */,
 			);
 			name = "Doc Narrator";
-			packageProductDependencies = (
-			);
 			productName = "Doc Narrator";
 			productReference = 3172F83B2FCBAD4400BDA198 /* Doc Narrator.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +160,6 @@
 				3172F84B2FCBAD4500BDA198 /* Doc NarratorTests */,
 			);
 			name = "Doc NarratorTests";
-			packageProductDependencies = (
-			);
 			productName = "Doc NarratorTests";
 			productReference = 3172F8482FCBAD4500BDA198 /* Doc NarratorTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,8 +181,6 @@
 				3172F8552FCBAD4500BDA198 /* Doc NarratorUITests */,
 			);
 			name = "Doc NarratorUITests";
-			packageProductDependencies = (
-			);
 			productName = "Doc NarratorUITests";
 			productReference = 3172F8522FCBAD4500BDA198 /* Doc NarratorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -212,6 +234,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE60E273C976E13C12AD0E2D /* kokoro in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,6 +423,11 @@
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64/Headers",
+					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64_x86_64-simulator/Headers",
+				);
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -410,12 +438,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = "in.lyr.Doc-Narrator";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Doc Narrator/Doc Narrator-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -432,6 +462,11 @@
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64/Headers",
+					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64_x86_64-simulator/Headers",
+				);
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -442,12 +477,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = "in.lyr.Doc-Narrator";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Doc Narrator/Doc Narrator-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
