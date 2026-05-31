@@ -26,17 +26,17 @@ struct ReaderView: View {
                     }
                     .padding()
                 }
-                .onChange(of: vm.currentSectionIndex) { _, newIdx in
-                    guard newIdx < vm.sections.count else { return }
+                .onChange(of: vm.currentSentenceIndex) { _, _ in
+                    let id = "s-\(vm.currentSectionIndex)-\(vm.currentSentenceIndex)"
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(vm.sections[newIdx].id, anchor: .top)
+                        proxy.scrollTo(id, anchor: .center)
                     }
                 }
                 .onAppear {
                     scrollToCurrent = {
-                        guard vm.currentSectionIndex < vm.sections.count else { return }
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            proxy.scrollTo(vm.sections[vm.currentSectionIndex].id, anchor: .center)
+                        let id = "s-\(vm.currentSectionIndex)-\(vm.currentSentenceIndex)"
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(id, anchor: .center)
                         }
                     }
                 }
@@ -103,6 +103,7 @@ struct ReaderView: View {
                 ForEach(Array(section.sentences.enumerated()), id: \.offset) { si, sentence in
                     let isActive = isCurrent && si == vm.currentSentenceIndex
                     Text(sentence)
+                        .id("s-\(index)-\(si)")
                         .font(.body)
                         .foregroundStyle(isActive ? .primary : .secondary)
                         .padding(.horizontal, isActive ? 4 : 0)

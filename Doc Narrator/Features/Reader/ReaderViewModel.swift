@@ -42,17 +42,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         self.settings = settings
         self.engine = SystemTTSEngine()
         reconfigureEngine()
-        NowPlayingManager.shared.setup(
-            onPlay:     { [weak self] in self?.play() },
-            onPause:    { [weak self] in self?.pause() },
-            onToggle:   { [weak self] in
-                guard let self else { return }
-                if state == .playing { pause() } else { play() }
-            },
-            onNext:     { [weak self] in self?.skipToNextSection() },
-            onPrevious: { [weak self] in self?.skipToPreviousSection() }
-        )
-        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
+        PlaybackCoordinator.shared.activeReader = self
     }
 
     // MARK: - Engine
@@ -95,19 +85,19 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     func play() {
         guard state == .ready || state == .paused else { return }
         state = .playing
-        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: true)
+        PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: true)
         speakCurrentSentence()
     }
 
     func pause() {
         guard state == .playing else { return }
         engine.pause(); sectionPauseTask?.cancel(); state = .paused
-        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
+        PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
     func stop() {
         engine.stop(); sectionPauseTask?.cancel(); state = .ready
-        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
+        PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
     func skipToNextSection() {
@@ -194,7 +184,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     nonisolated func engineDidBeginPlaying(_ engine: any TTSEngine) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            NowPlayingManager.shared.update(title: paper.title,
+            PlaybackCoordinator.shared.updateNowPlaying(title: paper.title,
                                             author: paper.authors.first ?? "",
                                             isPlaying: true)
         }

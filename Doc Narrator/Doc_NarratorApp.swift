@@ -14,6 +14,7 @@ struct Doc_NarratorApp: App {
         // Touch the shared Kokoro engine now so its 17 MB ONNX model loads in the
         // background while the user browses the library, not when they tap Play.
         _ = KokoroTTSEngine.shared
+        _ = PlaybackCoordinator.shared   // registers MPRemoteCommandCenter handlers at launch
 
         do {
             try AVAudioSession.sharedInstance().setCategory(
