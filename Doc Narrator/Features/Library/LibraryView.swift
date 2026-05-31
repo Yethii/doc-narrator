@@ -27,7 +27,7 @@ struct LibraryView: View {
                                     Text(paper.dateAdded.formatted(date: .abbreviated, time: .omitted))
                                         .font(.caption).foregroundStyle(.secondary)
                                     if paper.lastReadSentenceIndex > 0 {
-                                        Text("Reading in progress")
+                                        Text("In progress")
                                             .font(.caption2).foregroundStyle(.blue)
                                     }
                                 }

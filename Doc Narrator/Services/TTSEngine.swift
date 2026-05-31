@@ -3,6 +3,12 @@ import Foundation
 protocol TTSEngineDelegate: AnyObject {
     func engine(_ engine: any TTSEngine, didFinishSentenceAt index: Int)
     func engine(_ engine: any TTSEngine, didFailWithError error: Error)
+    /// Called the moment AVAudioPlayer.play() fires — use to update NowPlayingInfoCenter.
+    func engineDidBeginPlaying(_ engine: any TTSEngine)
+}
+
+extension TTSEngineDelegate {
+    func engineDidBeginPlaying(_ engine: any TTSEngine) {}
 }
 
 protocol TTSEngine: AnyObject {

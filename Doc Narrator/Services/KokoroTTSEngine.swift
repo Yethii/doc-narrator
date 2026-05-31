@@ -182,11 +182,17 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
             return
         }
         do {
+            // Re-activate the audio session each time we start a new player.
+            // The system uses this moment to register us as the Now Playing app.
+            try? AVAudioSession.sharedInstance().setActive(true)
             let player = try AVAudioPlayer(data: data, fileTypeHint: AVFileType.wav.rawValue)
             player.delegate = self
             player.prepareToPlay()
             audioPlayer = player
             player.play()
+            // Notify delegate so NowPlayingInfoCenter is updated when audio actually starts,
+            // not speculatively when the user taps Play (before synthesis finishes).
+            delegate?.engineDidBeginPlaying(self)
         } catch {
             isSpeaking = false
             delegate?.engine(self, didFailWithError: error)

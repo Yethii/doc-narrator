@@ -191,6 +191,15 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         Task { @MainActor [weak self] in self?.state = .error(error.localizedDescription) }
     }
 
+    nonisolated func engineDidBeginPlaying(_ engine: any TTSEngine) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            NowPlayingManager.shared.update(title: paper.title,
+                                            author: paper.authors.first ?? "",
+                                            isPlaying: true)
+        }
+    }
+
     private func handleSentenceFinished() {
         guard state == .playing, currentSectionIndex < sections.count else { return }
         let section: PaperSection = sections[currentSectionIndex]

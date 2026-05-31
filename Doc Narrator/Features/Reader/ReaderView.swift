@@ -4,6 +4,7 @@ struct ReaderView: View {
     let paper: Paper
     @StateObject private var vm: ReaderViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var scrollToCurrent: (() -> Void)?
 
     init(paper: Paper) {
         self.paper = paper
@@ -31,6 +32,14 @@ struct ReaderView: View {
                         proxy.scrollTo(vm.sections[newIdx].id, anchor: .top)
                     }
                 }
+                .onAppear {
+                    scrollToCurrent = {
+                        guard vm.currentSectionIndex < vm.sections.count else { return }
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            proxy.scrollTo(vm.sections[vm.currentSectionIndex].id, anchor: .center)
+                        }
+                    }
+                }
             }
 
             Divider()
@@ -38,6 +47,16 @@ struct ReaderView: View {
         }
         .navigationTitle(paper.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    scrollToCurrent?()
+                } label: {
+                    Image(systemName: "location.fill")
+                }
+                .disabled(vm.sections.isEmpty)
+            }
+        }
         .task { await vm.load() }
         .overlay {
             if vm.state == .processing {
