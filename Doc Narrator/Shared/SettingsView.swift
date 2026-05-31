@@ -6,10 +6,38 @@ struct SettingsView: View {
     @State private var apiKey = KeychainHelper.load(key: "openai_api_key") ?? ""
     @State private var settings = TTSSettings.load()
     @State private var voices: [AVSpeechSynthesisVoice] = []
+    @ObservedObject private var llm = LLMService.shared
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Picker("Engine", selection: $llm.settings.providerType) {
+                        ForEach(LLMProviderType.allCases, id: \.self) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    LabeledContent("Status") {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(llm.isReady ? Color.green : Color.secondary)
+                                .frame(width: 8, height: 8)
+                            Text(llm.statusText).foregroundStyle(.secondary)
+                        }
+                    }
+                    if llm.settings.providerType != .off {
+                        Picker("Narration", selection: $llm.settings.narrationMode) {
+                            ForEach(NarrationMode.allCases, id: \.self) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Intelligence")
+                } footer: {
+                    Text("On-device language model for summaries, questions, and explanations. With the Apple built-in model, nothing leaves your device. Narration mode controls how text is prepared for reading (Cleaned/Condensed apply once enabled).")
+                }
+
                 Section {
                     Picker("Voice", selection: $settings.systemVoiceIdentifier) {
                         Text("Best Available").tag("")
@@ -51,7 +79,7 @@ struct SettingsView: View {
                     Button("Done") { save(); dismiss() }
                 }
             }
-            .onAppear { loadVoices() }
+            .onAppear { loadVoices(); Task { await llm.refreshStatus() } }
         }
     }
 
