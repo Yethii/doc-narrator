@@ -44,9 +44,16 @@ struct PlayerControlsView: View {
                 Button {
                     vm.state == .playing ? vm.pause() : vm.play()
                 } label: {
-                    Image(systemName: vm.state == .playing ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.blue)
+                    if vm.isBuffering && vm.state == .playing {
+                        // Synthesizing — show a spinner until audio actually starts.
+                        ProgressView()
+                            .controlSize(.large)
+                            .frame(width: 60, height: 60)
+                    } else {
+                        Image(systemName: vm.state == .playing ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.blue)
+                    }
                 }
                 .disabled(!vm.state.isInteractable)
 

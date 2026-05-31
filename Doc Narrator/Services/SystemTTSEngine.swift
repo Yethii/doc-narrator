@@ -6,27 +6,33 @@ final class SystemTTSEngine: NSObject, TTSEngine {
     private var currentIndex = 0
     private(set) var isSpeaking = false
     private(set) var isPaused = false
+    /// Selected AVSpeechSynthesisVoice.identifier; empty = best available en-US.
+    var voiceIdentifier: String = ""
 
     override init() {
         super.init()
         synthesizer.delegate = self
     }
 
-    /// Best available en-US voice: Premium > Enhanced > Default, novelty voices excluded.
+    /// The chosen voice if given, otherwise the best available en-US voice
+    /// (Premium > Enhanced > Default, novelty voices excluded).
     static func bestVoice(preferring identifier: String = "") -> AVSpeechSynthesisVoice? {
-        let voices = AVSpeechSynthesisVoice.speechVoices()
+        // Honor an explicit selection across ALL languages first.
+        if !identifier.isEmpty,
+           let chosen = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.identifier == identifier }) {
+            return chosen
+        }
+        return AVSpeechSynthesisVoice.speechVoices()
             .filter { $0.language.hasPrefix("en-US") }
             .filter { ($0.voiceTraits.rawValue & AVSpeechSynthesisVoice.Traits.isNoveltyVoice.rawValue) == 0 }
-        if !identifier.isEmpty, let found = voices.first(where: { $0.identifier == identifier }) {
-            return found
-        }
-        return voices.sorted { $0.quality.rawValue > $1.quality.rawValue }.first
+            .sorted { $0.quality.rawValue > $1.quality.rawValue }
+            .first
     }
 
     func speak(sentence: String, at index: Int, rate: Float) {
         currentIndex = index
         let utterance = AVSpeechUtterance(string: sentence)
-        utterance.voice = SystemTTSEngine.bestVoice()
+        utterance.voice = SystemTTSEngine.bestVoice(preferring: voiceIdentifier)
         // Map 0–1 to AVSpeechUtteranceMinimumSpeechRate...Maximum
         let min = AVSpeechUtteranceMinimumSpeechRate
         let max = AVSpeechUtteranceMaximumSpeechRate

@@ -28,7 +28,8 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
             // a synthesis Task.detached is still running (use-after-free crash).
             if oldValue.engineType != settings.engineType
                     || oldValue.openAIVoice != settings.openAIVoice
-                    || oldValue.openAIModel != settings.openAIModel {
+                    || oldValue.openAIModel != settings.openAIModel
+                    || oldValue.systemVoiceIdentifier != settings.systemVoiceIdentifier {
                 reconfigureEngine()
             } else if oldValue.rate != settings.rate, state == .playing {
                 // Cancel the in-flight prefetch (synthesized at old rate) and
@@ -70,7 +71,9 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         case .kokoro:
             let e = KokoroTTSEngine.shared; e.delegate = self; engine = e
         case .system:
-            let e = SystemTTSEngine(); e.delegate = self; engine = e
+            let e = SystemTTSEngine()
+            e.voiceIdentifier = settings.systemVoiceIdentifier
+            e.delegate = self; engine = e
         case .openAI:
             let e = OpenAITTSEngine()
             e.apiKey = KeychainHelper.load(key: "openai_api_key") ?? ""

@@ -10,14 +10,17 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("On-Device Voice") {
+                Section {
                     Picker("Voice", selection: $settings.systemVoiceIdentifier) {
                         Text("Best Available").tag("")
                         ForEach(voices, id: \.identifier) { voice in
-                            Text("\(voice.name) (\(qualityLabel(voice.quality)))")
-                                .tag(voice.identifier)
+                            Text(voiceLabel(voice)).tag(voice.identifier)
                         }
                     }
+                } header: {
+                    Text("On-Device Voice")
+                } footer: {
+                    Text("Applies to the System Voice engine. “Enhanced”/“Premium” are higher-quality voices you can download in iOS Settings ▸ Accessibility ▸ Spoken Content ▸ Voices.")
                 }
 
                 Section {
@@ -68,11 +71,15 @@ struct SettingsView: View {
             .sorted { $0.quality.rawValue > $1.quality.rawValue }
     }
 
-    private func qualityLabel(_ quality: AVSpeechSynthesisVoiceQuality) -> String {
-        switch quality {
-        case .premium:  return "Premium"
-        case .enhanced: return "Enhanced"
-        default:        return "Default"
+    // Show the quality suffix only when it's an upgraded voice; plain Default
+    // voices ("Junior (Default)") just looked noisy and confusing.
+    private func voiceLabel(_ voice: AVSpeechSynthesisVoice) -> String {
+        let region = Locale.current.localizedString(forRegionCode: String(voice.language.suffix(2)))
+        let base = region.map { "\(voice.name) · \($0)" } ?? voice.name
+        switch voice.quality {
+        case .premium:  return "\(base) — Premium"
+        case .enhanced: return "\(base) — Enhanced"
+        default:        return base
         }
     }
 }
