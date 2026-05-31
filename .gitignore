@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# Large ML assets — too big for GitHub (100MB limit); keep locally, load at runtime.
+# Download/copy the Kokoro model into Doc Narrator/kokoro/ before building.
+Doc Narrator/kokoro/model.onnx
