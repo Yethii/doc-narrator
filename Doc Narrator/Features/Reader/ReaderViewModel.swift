@@ -220,7 +220,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     // MARK: - TTSEngineDelegate
 
     nonisolated func engine(_ engine: any TTSEngine, didFinishSentenceAt index: Int) {
-        Task { @MainActor [weak self] in self?.handleSentenceFinished() }
+        Task { @MainActor [weak self] in self?.handleSentenceFinished(finishedIndex: index) }
     }
 
     nonisolated func engine(_ engine: any TTSEngine, didFailWithError error: Error) {
@@ -237,8 +237,13 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         }
     }
 
-    private func handleSentenceFinished() {
+    private func handleSentenceFinished(finishedIndex: Int) {
         guard state == .playing, currentSectionIndex < sections.count else { return }
+        // Ignore stale finishes: when the user jumps/seeks mid-sentence, the engine
+        // (esp. AVSpeech, which finishes on a background thread) can deliver a
+        // didFinish for the OLD sentence after we've already moved. Advancing on it
+        // would skip past — or randomly overshoot — the sentence we jumped to.
+        guard finishedIndex == globalSentenceIndex else { return }
         let section: PaperSection = sections[currentSectionIndex]
 
         if section.type == .sectionHeader { advanceAfterSection(); return }

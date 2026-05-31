@@ -3,7 +3,9 @@ import AVFoundation
 final class SystemTTSEngine: NSObject, TTSEngine {
     weak var delegate: (any TTSEngineDelegate)?
     private let synthesizer = AVSpeechSynthesizer()
-    private var currentIndex = 0
+    // Index tracked PER utterance — a shared currentIndex would be overwritten by a
+    // new speak() before a stale didFinish reads it, breaking the stale-finish guard.
+    private var utteranceIndices: [ObjectIdentifier: Int] = [:]
     private(set) var isSpeaking = false
     private(set) var isPaused = false
     /// Selected AVSpeechSynthesisVoice.identifier; empty = best available en-US.
@@ -40,8 +42,8 @@ final class SystemTTSEngine: NSObject, TTSEngine {
     }
 
     func speak(sentence: String, at index: Int, rate: Float) {
-        currentIndex = index
         let utterance = AVSpeechUtterance(string: sentence)
+        utteranceIndices[ObjectIdentifier(utterance)] = index
         utterance.voice = resolvedVoice()
         // Map 0–1 to AVSpeechUtteranceMinimumSpeechRate...Maximum
         let min = AVSpeechUtteranceMinimumSpeechRate
@@ -54,7 +56,10 @@ final class SystemTTSEngine: NSObject, TTSEngine {
 
     func pause() { synthesizer.pauseSpeaking(at: .word); isSpeaking = false; isPaused = true }
     func resume() { synthesizer.continueSpeaking(); isSpeaking = true; isPaused = false }
-    func stop() { synthesizer.stopSpeaking(at: .immediate); isSpeaking = false; isPaused = false }
+    func stop() {
+        synthesizer.stopSpeaking(at: .immediate); isSpeaking = false; isPaused = false
+        utteranceIndices.removeAll()
+    }
 }
 
 extension SystemTTSEngine: AVSpeechSynthesizerDelegate {
@@ -70,15 +75,19 @@ extension SystemTTSEngine: AVSpeechSynthesizerDelegate {
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
                             didFinish utterance: AVSpeechUtterance) {
         isSpeaking = false
+        let id = ObjectIdentifier(utterance)
+        let index = utteranceIndices[id] ?? -1
+        utteranceIndices[id] = nil
         // AVSpeechSynthesizerDelegate fires on a background thread — dispatch to main
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            delegate?.engine(self, didFinishSentenceAt: currentIndex)
+            delegate?.engine(self, didFinishSentenceAt: index)
         }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
                             didCancel utterance: AVSpeechUtterance) {
         isSpeaking = false
+        utteranceIndices[ObjectIdentifier(utterance)] = nil
     }
 }

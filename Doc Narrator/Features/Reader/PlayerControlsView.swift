@@ -5,6 +5,13 @@ struct PlayerControlsView: View {
     @State private var scrubValue: Double = 0
     @State private var scrubbing = false
 
+    // 1-based sentence number for the current scrubber position.
+    private var currentScrubSentence: Int {
+        let total = vm.totalSentences
+        guard total > 0 else { return 0 }
+        return min(total, Int((scrubValue * Double(max(total - 1, 1))).rounded()) + 1)
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             // Progress scrubber — drag to skip to any point and start reading there.
@@ -14,13 +21,19 @@ struct PlayerControlsView: View {
                     if !editing { vm.seek(toFraction: scrubValue) }
                 }
                 .disabled(vm.totalSentences == 0)
-                HStack {
-                    Text("\(min(vm.globalSentenceIndex + 1, max(vm.totalSentences, 1)))")
-                    Spacer()
-                    Text("\(vm.totalSentences) sentences")
+                // Sentence number tracking the slider thumb's position.
+                GeometryReader { geo in
+                    let inset: CGFloat = 12
+                    let usable = max(geo.size.width - inset * 2, 1)
+                    let x = inset + CGFloat(scrubValue) * usable
+                    Text("\(currentScrubSentence) / \(vm.totalSentences)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                        .position(x: min(max(x, 26), geo.size.width - 26), y: 7)
                 }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .frame(height: 16)
+                .opacity(vm.totalSentences > 0 ? 1 : 0)
             }
             .padding(.horizontal)
             .onAppear { scrubValue = vm.progress }
