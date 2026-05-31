@@ -17,11 +17,11 @@ struct Doc_NarratorApp: App {
         _ = PlaybackCoordinator.shared   // registers MPRemoteCommandCenter handlers at launch
 
         do {
-            try AVAudioSession.sharedInstance().setCategory(
-                .playback,
-                mode: .spokenAudio,
-                options: [.duckOthers]
-            )
+            // Plain .playback (no .duckOthers): makes us the system's primary
+            // "Now Playing" app so Control Center / lock screen route transport
+            // commands to us. .duckOthers would mark us as a secondary/ducking
+            // source (like a GPS app) and we'd never own the Now Playing slot.
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("AudioSession error: \(error)")

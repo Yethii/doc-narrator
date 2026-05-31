@@ -4,7 +4,7 @@ struct ReaderView: View {
     let paper: Paper
     @StateObject private var vm: ReaderViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var scrollToCurrent: (() -> Void)?
+    @State private var locateTrigger = 0
 
     init(paper: Paper) {
         self.paper = paper
@@ -26,19 +26,17 @@ struct ReaderView: View {
                     }
                     .padding()
                 }
+                // Auto-scroll: follow the narration as the current sentence changes.
                 .onChange(of: vm.currentSentenceIndex) { _, _ in
-                    let id = "s-\(vm.currentSectionIndex)-\(vm.currentSentenceIndex)"
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo(id, anchor: .center)
-                    }
+                    scrollToCurrentSentence(proxy)
                 }
-                .onAppear {
-                    scrollToCurrent = {
-                        let id = "s-\(vm.currentSectionIndex)-\(vm.currentSentenceIndex)"
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            proxy.scrollTo(id, anchor: .center)
-                        }
-                    }
+                .onChange(of: vm.currentSectionIndex) { _, _ in
+                    scrollToCurrentSentence(proxy)
+                }
+                // Manual locate: trigger counter increments on button tap. The proxy
+                // captured here is always the live one (re-evaluated each body render).
+                .onChange(of: locateTrigger) { _, _ in
+                    scrollToCurrentSentence(proxy)
                 }
             }
 
@@ -50,7 +48,7 @@ struct ReaderView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    scrollToCurrent?()
+                    locateTrigger += 1
                 } label: {
                     Image(systemName: "location.fill")
                 }
@@ -78,6 +76,21 @@ struct ReaderView: View {
             Button("OK") { dismiss() }
         } message: {
             if case .error(let msg) = vm.state { Text(msg) }
+        }
+    }
+
+    /// Scrolls to the exact sentence being narrated. Body/abstract sentences carry
+    /// "s-{section}-{sentence}" IDs; section-header rows only have the section UUID,
+    /// so fall back to that when the current section is a header.
+    private func scrollToCurrentSentence(_ proxy: ScrollViewProxy) {
+        guard vm.currentSectionIndex < vm.sections.count else { return }
+        let section = vm.sections[vm.currentSectionIndex]
+        withAnimation(.easeInOut(duration: 0.3)) {
+            if section.type == .sectionHeader {
+                proxy.scrollTo(section.id, anchor: .center)
+            } else {
+                proxy.scrollTo("s-\(vm.currentSectionIndex)-\(vm.currentSentenceIndex)", anchor: .center)
+            }
         }
     }
 
