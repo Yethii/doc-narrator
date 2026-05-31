@@ -43,12 +43,13 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         self.engine = SystemTTSEngine()
         reconfigureEngine()
         NowPlayingManager.shared.setup(
-            onPlay: { [weak self] in
+            onPlay:     { [weak self] in self?.play() },
+            onPause:    { [weak self] in self?.pause() },
+            onToggle:   { [weak self] in
                 guard let self else { return }
                 if state == .playing { pause() } else { play() }
             },
-            onPause: { [weak self] in self?.pause() },
-            onNext: { [weak self] in self?.skipToNextSection() },
+            onNext:     { [weak self] in self?.skipToNextSection() },
             onPrevious: { [weak self] in self?.skipToPreviousSection() }
         )
         NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
