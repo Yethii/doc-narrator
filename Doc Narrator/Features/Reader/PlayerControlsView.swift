@@ -19,21 +19,17 @@ struct PlayerControlsView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // Progress scrubber, with matching current / total captions beneath each end.
+            // Progress scrubber, with a centered "current / total" sentence count beneath.
             VStack(spacing: 4) {
                 Slider(value: $scrubValue, in: 0...1) { editing in
                     scrubbing = editing
                     if !editing { vm.seek(toFraction: scrubValue) }
                 }
                 .disabled(vm.totalSentences == 0)
-                HStack {
-                    Text("\(currentScrubSentence)")
-                    Spacer()
-                    Text("\(vm.totalSentences)")
-                }
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .opacity(vm.totalSentences > 0 ? 1 : 0)
+                Text("\(currentScrubSentence) / \(vm.totalSentences)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .opacity(vm.totalSentences > 0 ? 1 : 0)
             }
             .onAppear { scrubValue = vm.progress }
             .onChange(of: vm.progress) { _, new in if !scrubbing { scrubValue = new } }
@@ -50,13 +46,13 @@ struct PlayerControlsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Transport — four equal, evenly distributed slots for a symmetric row.
-            HStack(spacing: 0) {
-                transportButton("arrow.counterclockwise", size: 22) { vm.restartFromBeginning() }
-                transportButton("backward.end.fill", size: 24) { vm.skipToPreviousSection() }
+            // Transport — prev / play-pause / next, centered and symmetric.
+            HStack(spacing: 56) {
+                transportButton("backward.end.fill", size: 26) { vm.skipToPreviousSection() }
                 playPauseButton
-                transportButton("forward.end.fill", size: 24) { vm.skipToNextSection() }
+                transportButton("forward.end.fill", size: 26) { vm.skipToNextSection() }
             }
+            .frame(maxWidth: .infinity)
 
             // Engine picker
             Picker("Engine", selection: $vm.settings.engineType) {
@@ -78,8 +74,7 @@ struct PlayerControlsView: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: size))
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .frame(width: 56, height: 56)
         }
         .disabled(!vm.state.isInteractable)
     }
@@ -93,12 +88,11 @@ struct PlayerControlsView: View {
                     ProgressView().controlSize(.large)
                 } else {
                     Image(systemName: vm.state == .playing ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 52))
+                        .font(.system(size: 56))
                         .foregroundStyle(.blue)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
+            .frame(width: 56, height: 56)
         }
         .disabled(!vm.state.isInteractable)
     }

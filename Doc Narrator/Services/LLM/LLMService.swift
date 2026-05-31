@@ -186,10 +186,11 @@ final class LLMService: ObservableObject {
         "Be accurate and faithful to the source; do not invent details and do not add a " +
         "'TL;DR' label."
 
-    // Apple's on-device model has a small (~4k token) context shared by input + output.
-    // Keep each model call's input well under that. ~3 chars/token, so ~2800 chars ≈ ~950 tokens.
-    private static let chunkCharBudget = 2800
-    private static let foldCharBudget = 3000   // max combined map-summary chars per reduce pass
+    // Apple's on-device model has a ~4k-token context shared by input + output. Use large
+    // chunks (~7000 chars ≈ ~2300 tokens, leaving room for the capped output) so a typical
+    // paper needs only a handful of calls — fewer calls = far less chance of rate limiting.
+    private static let chunkCharBudget = 7000
+    private static let foldCharBudget = 7000   // max combined map-summary chars per reduce pass
 
     /// Flatten sections into text and split into context-sized chunks. Each chunk is hard-capped
     /// in size (never merges overflow into one giant chunk). ALL chunks are summarized — content

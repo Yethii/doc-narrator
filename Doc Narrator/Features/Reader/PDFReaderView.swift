@@ -65,6 +65,8 @@ struct PDFReaderView: UIViewRepresentable {
         var lastBuffering = false
         private let tag = "tts_hl"
         private var highlightGeneration = 0
+        // When the user double-taps a sentence, it's already on screen — don't auto-scroll/zoom.
+        private var suppressScrollOnce = false
 
         init(vm: ReaderViewModel) { self.vm = vm }
 
@@ -112,6 +114,7 @@ struct PDFReaderView: UIViewRepresentable {
                 for (si, section) in vm.sections.enumerated() {
                     for (sj, sentence) in section.sentences.enumerated()
                     where compactAlnum(sentence).contains(needle) {
+                        self.suppressScrollOnce = true
                         DispatchQueue.main.async { vm.jumpTo(sectionIndex: si, sentenceIndex: sj) }
                         return
                     }
@@ -127,6 +130,7 @@ struct PDFReaderView: UIViewRepresentable {
             for (si, section) in vm.sections.enumerated() {
                 for (sj, sentence) in section.sentences.enumerated()
                 where sentence.lowercased().contains(lower) {
+                    self.suppressScrollOnce = true
                     DispatchQueue.main.async { vm.jumpTo(sectionIndex: si, sentenceIndex: sj) }
                     return
                 }
@@ -275,7 +279,15 @@ struct PDFReaderView: UIViewRepresentable {
                 ann.userName = tag
                 page.addAnnotation(ann)
             }
-            pdfView.go(to: sel)
+            // Don't move the view when the user just tapped this sentence (it's already visible).
+            // For auto-advance, scroll to it but preserve the current zoom so it never jolts.
+            if suppressScrollOnce {
+                suppressScrollOnce = false
+            } else {
+                let scale = pdfView.scaleFactor
+                pdfView.go(to: sel)
+                pdfView.scaleFactor = scale
+            }
         }
     }
 }
