@@ -7,6 +7,15 @@
 
 import SwiftUI
 import AVFoundation
+import UserNotifications
+
+/// Presents "summary ready" notifications as banners even while the app is in the foreground.
+final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationDelegate()
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions { [.banner, .sound] }
+}
 
 @main
 struct Doc_NarratorApp: App {
@@ -15,6 +24,7 @@ struct Doc_NarratorApp: App {
         // background while the user browses the library, not when they tap Play.
         _ = KokoroTTSEngine.shared
         _ = PlaybackCoordinator.shared   // registers MPRemoteCommandCenter handlers at launch
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
 
         do {
             // Plain .playback (no .duckOthers): makes us the system's primary

@@ -5,11 +5,14 @@ import SwiftUI
 struct IntelligenceHomeView: View {
     @ObservedObject var vm: ReaderViewModel
     @ObservedObject private var llm = LLMService.shared
+    @ObservedObject private var generator = SummaryGenerator.shared
 
     @State private var sessions = PaperSessions()
     @State private var askTopic = false
     @State private var topicText = ""
-    @State private var customTopic: String?      // drives navigation to a custom summary
+    @State private var activeJob: SummaryGenerator.Job?   // drives navigation to a live job
+
+    private var liveJobs: [SummaryGenerator.Job] { generator.jobs(for: vm.paper.id) }
 
     var body: some View {
         List {
@@ -21,17 +24,26 @@ struct IntelligenceHomeView: View {
             }
 
             Section("Summaries") {
+                // In-flight generations (keep running even if you leave this page).
+                ForEach(liveJobs) { job in
+                    NavigationLink {
+                        SummaryArtifactView(paper: vm.paper, sections: vm.sections, job: job)
+                    } label: {
+                        jobRow(job)
+                    }
+                }
+
                 ForEach(sessions.summaries) { artifact in
                     NavigationLink {
-                        SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .existing(artifact))
+                        SummaryArtifactView(paper: vm.paper, sections: vm.sections, artifact: artifact)
                     } label: {
                         summaryRow(artifact)
                     }
                 }
                 .onDelete(perform: deleteSummaries)
 
-                NavigationLink {
-                    SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .generateGeneral)
+                Button {
+                    activeJob = generator.startGeneral(paper: vm.paper, sections: vm.sections)
                 } label: {
                     Label("New general summary", systemImage: "sparkles")
                 }
@@ -61,14 +73,27 @@ struct IntelligenceHomeView: View {
             Button("Cancel", role: .cancel) {}
             Button("Summarize") {
                 let t = topicText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !t.isEmpty { customTopic = t }
+                if !t.isEmpty {
+                    activeJob = generator.startCustom(topic: t, paper: vm.paper, sections: vm.sections)
+                }
             }
         } message: {
-            Text("What should the summary focus on?")
+            Text("What should the summary focus on? You'll be notified when it's ready.")
         }
-        .navigationDestination(item: $customTopic) { topic in
-            SummaryArtifactView(paper: vm.paper, sections: vm.sections, mode: .generateCustom(topic))
+        .navigationDestination(item: $activeJob) { job in
+            SummaryArtifactView(paper: vm.paper, sections: vm.sections, job: job)
         }
+    }
+
+    private func jobRow(_ job: SummaryGenerator.Job) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.title).font(.headline).lineLimit(1)
+                Text("Generating…").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func summaryRow(_ a: SummaryArtifact) -> some View {

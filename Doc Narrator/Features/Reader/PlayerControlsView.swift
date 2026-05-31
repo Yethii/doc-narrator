@@ -57,7 +57,12 @@ struct PlayerControlsView: View {
             .padding(.horizontal)
 
             // Transport controls
-            HStack(spacing: 44) {
+            HStack(spacing: 36) {
+                Button { vm.restartFromBeginning() } label: {
+                    Image(systemName: "arrow.counterclockwise").font(.title2)
+                }
+                .disabled(!vm.state.isInteractable)
+
                 Button { vm.skipToPreviousSection() } label: {
                     Image(systemName: "backward.end.fill").font(.title2)
                 }

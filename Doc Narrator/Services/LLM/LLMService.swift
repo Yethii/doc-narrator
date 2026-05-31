@@ -88,10 +88,11 @@ final class LLMService: ObservableObject {
         let picked = Retriever.topSections(for: topic, in: sections, k: 6)
         let source = picked.isEmpty ? sections : picked
         let reduce =
-            "You are answering a reader's request to summarize what a document says about a " +
-            "specific topic: \"\(topic)\". Using Markdown, output a **TL;DR** (2–3 sentences) " +
-            "focused on that topic, then **Key points** as 3–6 bullets. If the document barely " +
-            "covers the topic, say so plainly. Be faithful to the source; do not invent details."
+            "Summarize what the document says about a specific topic: \"\(topic)\". " +
+            "Begin with a 2–4 sentence plain-language overview focused on that topic (no heading " +
+            "or label), then a blank line and a line **Key points** with 3–6 concise bullets. " +
+            "If the document barely covers the topic, say so plainly. Be faithful to the source; " +
+            "do not invent details and do not add a 'TL;DR' label."
         return summarizeCore(sections: source, reduceSystem: reduce)
     }
 
@@ -110,17 +111,17 @@ final class LLMService: ObservableObject {
                 do {
                     if chunks.count == 1 {
                         for try await delta in self.stream(system: reduceSystem, user: chunks[0],
-                                                           maxTokens: 450, temperature: 0.3) {
+                                                           maxTokens: 600, temperature: 0.3) {
                             continuation.yield(delta)
                         }
                         continuation.finish(); return
                     }
-                    // MAP: condense each chunk to a few sentences.
+                    // MAP: condense each chunk (all chunks — never silently drop content).
                     var summaries: [String] = []
                     for chunk in chunks {
                         try Task.checkCancellation()
                         let part = try await self.complete(system: Self.mapSystem, user: chunk,
-                                                           maxTokens: 160, temperature: 0.2)
+                                                           maxTokens: 220, temperature: 0.2)
                         summaries.append(part)
                     }
                     // FOLD: re-summarize in groups until the combined text fits one reduce pass.
@@ -129,14 +130,14 @@ final class LLMService: ObservableObject {
                         for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
                             try Task.checkCancellation()
                             folded.append(try await self.complete(system: Self.mapSystem, user: group,
-                                                                  maxTokens: 160, temperature: 0.2))
+                                                                  maxTokens: 220, temperature: 0.2))
                         }
                         summaries = folded
                     }
                     // REDUCE: stream the final reader-facing summary.
                     for try await delta in self.stream(system: reduceSystem,
                                                        user: summaries.joined(separator: "\n\n"),
-                                                       maxTokens: 450, temperature: 0.3) {
+                                                       maxTokens: 600, temperature: 0.3) {
                         continuation.yield(delta)
                     }
                     continuation.finish()
@@ -156,21 +157,20 @@ final class LLMService: ObservableObject {
         "Only use information present in the text; do not speculate or add outside facts."
 
     private static let reduceSystem =
-        "You are writing a clear, reader-friendly summary of a document for someone deciding " +
-        "whether to read it. Using Markdown, output exactly:\n" +
-        "**TL;DR** — a 2–3 sentence plain-language overview.\n\n" +
-        "**Key points**\n- 4–7 bullet points of the most important takeaways.\n\n" +
-        "Be concise and faithful to the source; do not invent details."
+        "You are writing a clear, reader-friendly summary of a document. Begin with a 2–4 " +
+        "sentence plain-language overview (no heading or label). Then a blank line and a line " +
+        "**Key points** followed by 4–7 concise bullets of the most important takeaways. " +
+        "Be accurate and faithful to the source; do not invent details and do not add a " +
+        "'TL;DR' label."
 
     // Apple's on-device model has a small (~4k token) context shared by input + output.
     // Keep each model call's input well under that. ~3 chars/token, so ~2800 chars ≈ ~950 tokens.
     private static let chunkCharBudget = 2800
     private static let foldCharBudget = 3000   // max combined map-summary chars per reduce pass
-    private static let maxChunks = 24          // bound total map calls (and time) on huge docs
 
     /// Flatten sections into text and split into context-sized chunks. Each chunk is hard-capped
-    /// in size (never merges overflow into one giant chunk). Very long docs are sampled evenly
-    /// to `maxChunks` so the map step stays bounded.
+    /// in size (never merges overflow into one giant chunk). ALL chunks are summarized — content
+    /// is never dropped; long docs just take longer (mitigated by background generation).
     private static func buildChunks(from sections: [PaperSection]) -> [String] {
         var blocks: [String] = []
         for s in sections {
@@ -197,12 +197,6 @@ final class LLMService: ObservableObject {
             }
         }
         flush()
-
-        // Bound the number of chunks by sampling evenly (keeps coverage across the paper).
-        if chunks.count > maxChunks {
-            let step = Double(chunks.count) / Double(maxChunks)
-            chunks = (0..<maxChunks).map { chunks[Int(Double($0) * step)] }
-        }
         return chunks
     }
 

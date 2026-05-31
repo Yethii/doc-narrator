@@ -122,6 +122,15 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         PlaybackCoordinator.shared.updateNowPlaying(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
+    /// Restart the document from the very beginning and play.
+    func restartFromBeginning() {
+        engine.stop(); sectionPauseTask?.cancel()
+        currentSectionIndex = 0; currentSentenceIndex = 0; globalSentenceIndex = 0
+        savePosition()
+        state = .playing
+        speakCurrentSentence()
+    }
+
     func skipToNextSection() {
         engine.stop(); sectionPauseTask?.cancel()
         advanceToNextSection()
