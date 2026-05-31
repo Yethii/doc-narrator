@@ -11,7 +11,10 @@ enum KeychainHelper {
         SecItemDelete(query as CFDictionary)
         var attrs = query
         attrs[kSecValueData] = data
-        attrs[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlocked
+        // ThisDeviceOnly: the key is readable only while the device is unlocked AND
+        // never leaves this device — excluded from iCloud Keychain sync and from
+        // encrypted/iTunes/Finder backups, so it can't be restored onto another device.
+        attrs[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         SecItemAdd(attrs as CFDictionary, nil)
     }
 
