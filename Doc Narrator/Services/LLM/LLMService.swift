@@ -73,6 +73,25 @@ final class LLMService: ObservableObject {
                                                       maxTokens: maxTokens, temperature: temperature))
     }
 
+    /// `complete` with exponential backoff on the on-device model's rate limit.
+    private func completeRetrying(system: String, user: String,
+                                  maxTokens: Int, temperature: Double) async throws -> String {
+        var delay: UInt64 = 1_000_000_000   // 1s
+        for attempt in 0..<4 {
+            do {
+                return try await complete(system: system, user: user,
+                                          maxTokens: maxTokens, temperature: temperature)
+            } catch {
+                let msg = String(describing: error).lowercased()
+                let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
+                guard isRateLimit, attempt < 3 else { throw error }
+                try await Task.sleep(nanoseconds: delay)
+                delay *= 2
+            }
+        }
+        throw LLMError.unavailable("Rate limited")
+    }
+
     func cancel() { provider?.cancel() }
 
     // MARK: - Summarize (map-reduce so long papers fit the model's context window)
@@ -117,11 +136,13 @@ final class LLMService: ObservableObject {
                         continuation.finish(); return
                     }
                     // MAP: condense each chunk (all chunks — never silently drop content).
+                    // Paced + retried to stay under the on-device model's rate limit.
                     var summaries: [String] = []
-                    for chunk in chunks {
+                    for (i, chunk) in chunks.enumerated() {
                         try Task.checkCancellation()
-                        let part = try await self.complete(system: Self.mapSystem, user: chunk,
-                                                           maxTokens: 220, temperature: 0.2)
+                        if i > 0 { try await Task.sleep(nanoseconds: 350_000_000) }
+                        let part = try await self.completeRetrying(system: Self.mapSystem, user: chunk,
+                                                                   maxTokens: 220, temperature: 0.2)
                         summaries.append(part)
                     }
                     // FOLD: re-summarize in groups until the combined text fits one reduce pass.
@@ -129,11 +150,13 @@ final class LLMService: ObservableObject {
                         var folded: [String] = []
                         for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
                             try Task.checkCancellation()
-                            folded.append(try await self.complete(system: Self.mapSystem, user: group,
-                                                                  maxTokens: 220, temperature: 0.2))
+                            try await Task.sleep(nanoseconds: 350_000_000)
+                            folded.append(try await self.completeRetrying(system: Self.mapSystem, user: group,
+                                                                          maxTokens: 220, temperature: 0.2))
                         }
                         summaries = folded
                     }
+                    try await Task.sleep(nanoseconds: 350_000_000)
                     // REDUCE: stream the final reader-facing summary.
                     for try await delta in self.stream(system: reduceSystem,
                                                        user: summaries.joined(separator: "\n\n"),

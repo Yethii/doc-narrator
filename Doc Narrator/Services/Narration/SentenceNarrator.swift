@@ -3,11 +3,11 @@ import Combine
 
 /// Plays an ordered list of plain-text sentences aloud, gap-free, through the active TTS engine.
 /// Reusable by any AI-text surface (summaries, chat). Mirrors the document reader's prefetch
-/// pipeline so there are no pauses between sentences, and reports `currentIndex` for highlighting.
+/// pipeline so there are no pauses, and reports `currentIndex` for highlighting.
 ///
-/// Coexistence: the document reader and this narrator may both use `KokoroTTSEngine.shared`.
-/// They are never active simultaneously; each claims `engine.delegate = self` when it speaks
-/// (last-writer-wins), so finish callbacks always route to the current owner.
+/// IMPORTANT: the engine is acquired *lazily* — the narrator never touches the (shared) TTS
+/// engine until the user actually plays. Merely creating a narrator (when a summary view
+/// appears) must not stop or hijack the document reader's playback.
 @MainActor
 final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
     @Published private(set) var sentences: [String] = []
@@ -19,29 +19,29 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
         didSet {
             guard settings != oldValue else { return }
             settings.save()
-            if oldValue.engineType != settings.engineType
+            let engineChanged = oldValue.engineType != settings.engineType
                 || oldValue.openAIVoice != settings.openAIVoice
                 || oldValue.openAIModel != settings.openAIModel
-                || oldValue.systemVoiceIdentifier != settings.systemVoiceIdentifier {
+                || oldValue.systemVoiceIdentifier != settings.systemVoiceIdentifier
+            if engineChanged {
                 let wasPlaying = isPlaying
                 let idx = max(0, currentIndex)
-                reconfigureEngine()
-                if wasPlaying { jump(to: idx) }   // restart current sentence on the new engine
+                if wasPlaying { engine?.stop() }
+                engine = nil                 // drop reference; rebuilt lazily on next play
+                if wasPlaying { jump(to: idx) }
             }
         }
     }
 
-    private var engine: any TTSEngine
+    private var engine: (any TTSEngine)?
     private static let indexBase = 2_000_000   // distinct from the document loop's index space
 
     override init() {
         self.settings = TTSSettings.load()
-        self.engine = SystemTTSEngine()
         super.init()
-        reconfigureEngine()
     }
 
-    /// Replace the queue. Stops any current playback.
+    /// Replace the queue. Stops only our own playback (never an idle shared engine).
     func load(sentences: [String]) {
         stop()
         self.sentences = sentences
@@ -52,54 +52,56 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
     func play() {
         guard !sentences.isEmpty else { return }
         if currentIndex < 0 || currentIndex >= sentences.count { currentIndex = 0 }
-        engine.delegate = self
         isPlaying = true
         speakCurrent()
     }
 
     func pause() {
-        engine.pause(); isPlaying = false; isBuffering = false
+        engine?.pause(); isPlaying = false; isBuffering = false
     }
 
     func jump(to index: Int) {
         guard index >= 0, index < sentences.count else { return }
-        engine.stop()
-        engine.delegate = self
+        let e = ensureEngine()
+        e.stop(); e.delegate = self
         currentIndex = index
         isPlaying = true
         speakCurrent()
     }
 
     func stop() {
-        engine.stop()
+        engine?.stop()
         isPlaying = false; isBuffering = false; currentIndex = -1
+    }
+
+    private func ensureEngine() -> any TTSEngine {
+        if let engine { return engine }
+        let e: any TTSEngine
+        switch settings.engineType {
+        case .kokoro:
+            e = KokoroTTSEngine.shared
+        case .system:
+            let s = SystemTTSEngine(); s.voiceIdentifier = settings.systemVoiceIdentifier; e = s
+        case .openAI:
+            let o = OpenAITTSEngine()
+            o.apiKey = KeychainHelper.load(key: "openai_api_key") ?? ""
+            o.voice = settings.openAIVoice.rawValue
+            o.model = settings.openAIModel
+            e = o
+        }
+        engine = e
+        return e
     }
 
     private func speakCurrent() {
         guard isPlaying, currentIndex >= 0, currentIndex < sentences.count else { return }
-        engine.delegate = self
+        let e = ensureEngine()
+        e.delegate = self                 // claim the (possibly shared) engine while we read
         isBuffering = true
-        engine.speak(sentence: sentences[currentIndex], at: Self.indexBase + currentIndex, rate: settings.rate)
+        e.speak(sentence: sentences[currentIndex], at: Self.indexBase + currentIndex, rate: settings.rate)
         let next = currentIndex + 1
         if next < sentences.count {
-            engine.prefetch(sentence: sentences[next], at: Self.indexBase + next, rate: settings.rate)
-        }
-    }
-
-    private func reconfigureEngine() {
-        engine.stop()
-        switch settings.engineType {
-        case .kokoro:
-            let e = KokoroTTSEngine.shared; e.delegate = self; engine = e
-        case .system:
-            let e = SystemTTSEngine(); e.voiceIdentifier = settings.systemVoiceIdentifier
-            e.delegate = self; engine = e
-        case .openAI:
-            let e = OpenAITTSEngine()
-            e.apiKey = KeychainHelper.load(key: "openai_api_key") ?? ""
-            e.voice = settings.openAIVoice.rawValue
-            e.model = settings.openAIModel
-            e.delegate = self; engine = e
+            e.prefetch(sentence: sentences[next], at: Self.indexBase + next, rate: settings.rate)
         }
     }
 
@@ -120,7 +122,7 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
     private func handleFinished(_ finishedIndex: Int) {
         guard isPlaying else { return }
         let idx = finishedIndex - Self.indexBase
-        guard idx == currentIndex else { return }   // ignore stale finishes after a jump
+        guard idx == currentIndex else { return }   // ignore stale finishes / the document loop's
         let next = currentIndex + 1
         if next < sentences.count {
             currentIndex = next

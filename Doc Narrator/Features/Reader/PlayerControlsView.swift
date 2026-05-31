@@ -18,76 +18,44 @@ struct PlayerControlsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Progress scrubber — drag to skip to any point and start reading there.
-            VStack(spacing: 2) {
+        VStack(spacing: 20) {
+            // Progress scrubber, with matching current / total captions beneath each end.
+            VStack(spacing: 4) {
                 Slider(value: $scrubValue, in: 0...1) { editing in
                     scrubbing = editing
                     if !editing { vm.seek(toFraction: scrubValue) }
                 }
                 .disabled(vm.totalSentences == 0)
-                // Sentence number tracking the slider thumb's position.
-                GeometryReader { geo in
-                    let inset: CGFloat = 12
-                    let usable = max(geo.size.width - inset * 2, 1)
-                    let x = inset + CGFloat(scrubValue) * usable
-                    Text("\(currentScrubSentence) / \(vm.totalSentences)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .position(x: min(max(x, 26), geo.size.width - 26), y: 7)
+                HStack {
+                    Text("\(currentScrubSentence)")
+                    Spacer()
+                    Text("\(vm.totalSentences)")
                 }
-                .frame(height: 16)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
                 .opacity(vm.totalSentences > 0 ? 1 : 0)
             }
-            .padding(.horizontal)
             .onAppear { scrubValue = vm.progress }
             .onChange(of: vm.progress) { _, new in if !scrubbing { scrubValue = new } }
 
-            // Speed control
-            HStack(spacing: 8) {
-                Image(systemName: "tortoise.fill").foregroundStyle(.secondary)
-                Slider(value: $vm.settings.rate, in: 0...1, step: 0.05)
-                Image(systemName: "hare.fill").foregroundStyle(.secondary)
-                Text(speedLabel)
-                    .font(.caption.monospacedDigit())
+            // Speed, with a centered caption beneath (same pattern as the scrubber).
+            VStack(spacing: 4) {
+                HStack(spacing: 10) {
+                    Image(systemName: "tortoise.fill").foregroundStyle(.secondary)
+                    Slider(value: $vm.settings.rate, in: 0...1, step: 0.05)
+                    Image(systemName: "hare.fill").foregroundStyle(.secondary)
+                }
+                Text("Speed \(speedLabel)")
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
             }
-            .padding(.horizontal)
 
-            // Transport controls
-            HStack(spacing: 36) {
-                Button { vm.restartFromBeginning() } label: {
-                    Image(systemName: "arrow.counterclockwise").font(.title2)
-                }
-                .disabled(!vm.state.isInteractable)
-
-                Button { vm.skipToPreviousSection() } label: {
-                    Image(systemName: "backward.end.fill").font(.title2)
-                }
-                .disabled(!vm.state.isInteractable)
-
-                Button {
-                    vm.state == .playing ? vm.pause() : vm.play()
-                } label: {
-                    if vm.isBuffering && vm.state == .playing {
-                        // Synthesizing — show a spinner until audio actually starts.
-                        ProgressView()
-                            .controlSize(.large)
-                            .frame(width: 60, height: 60)
-                    } else {
-                        Image(systemName: vm.state == .playing ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .disabled(!vm.state.isInteractable)
-
-                Button { vm.skipToNextSection() } label: {
-                    Image(systemName: "forward.end.fill").font(.title2)
-                }
-                .disabled(!vm.state.isInteractable)
+            // Transport — four equal, evenly distributed slots for a symmetric row.
+            HStack(spacing: 0) {
+                transportButton("arrow.counterclockwise", size: 22) { vm.restartFromBeginning() }
+                transportButton("backward.end.fill", size: 24) { vm.skipToPreviousSection() }
+                playPauseButton
+                transportButton("forward.end.fill", size: 24) { vm.skipToNextSection() }
             }
 
             // Engine picker
@@ -97,12 +65,42 @@ struct PlayerControlsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal)
         }
+        .padding(.horizontal)
         .padding(.vertical)
         .background(.ultraThinMaterial)
         .onChange(of: vm.settings.engineType) { _, _ in vm.settings.save() }
         .onChange(of: vm.settings.rate) { _, _ in vm.settings.save() }
+    }
+
+    private func transportButton(_ systemName: String, size: CGFloat,
+                                 action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: size))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+        }
+        .disabled(!vm.state.isInteractable)
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            vm.state == .playing ? vm.pause() : vm.play()
+        } label: {
+            Group {
+                if vm.isBuffering && vm.state == .playing {
+                    ProgressView().controlSize(.large)
+                } else {
+                    Image(systemName: vm.state == .playing ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 52))
+                        .foregroundStyle(.blue)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+        }
+        .disabled(!vm.state.isInteractable)
     }
 }
 
