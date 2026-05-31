@@ -72,6 +72,8 @@ struct ReaderView: View {
                 .font(.title3.bold())
                 .foregroundStyle(isCurrent ? Color.accentColor : .primary)
                 .padding(.top, 8)
+                .contentShape(Rectangle())
+                .onTapGesture { vm.jumpTo(sectionIndex: index) }
 
         case .title:
             Text(section.sentences.first ?? "")
@@ -91,6 +93,8 @@ struct ReaderView: View {
                             in: RoundedRectangle(cornerRadius: 4)
                         )
                         .animation(.easeInOut(duration: 0.15), value: isActive)
+                        .contentShape(Rectangle())
+                        .onTapGesture { vm.jumpTo(sectionIndex: index, sentenceIndex: si) }
                 }
             }
             .padding(.vertical, 4)

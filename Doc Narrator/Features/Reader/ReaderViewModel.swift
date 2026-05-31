@@ -19,10 +19,15 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
             // Rate and other display-only settings take effect on the next sentence via
             // settings.rate at call time — recreating here would free the C pointer while
             // a synthesis Task.detached is still running (use-after-free crash).
-            guard oldValue.engineType != settings.engineType
+            if oldValue.engineType != settings.engineType
                     || oldValue.openAIVoice != settings.openAIVoice
-                    || oldValue.openAIModel != settings.openAIModel else { return }
-            reconfigureEngine()
+                    || oldValue.openAIModel != settings.openAIModel {
+                reconfigureEngine()
+            } else if oldValue.rate != settings.rate, state == .playing {
+                // Cancel the in-flight prefetch (synthesized at old rate) and
+                // immediately queue a new one at the updated rate.
+                prefetchNextSentence()
+            }
         }
     }
 
@@ -91,6 +96,24 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         engine.stop(); sectionPauseTask?.cancel()
         advanceToNextSection()
         if state == .playing { speakCurrentSentence() }
+    }
+
+    // Jump to any section/sentence and immediately start reading from there.
+    func jumpTo(sectionIndex: Int, sentenceIndex: Int = 0) {
+        engine.stop(); sectionPauseTask?.cancel()
+        currentSectionIndex  = sectionIndex
+        currentSentenceIndex = sentenceIndex
+        // Recalculate flat sentence index
+        var flat = 0
+        for (si, sec) in sections.enumerated() {
+            guard sec.type != .sectionHeader else { continue }
+            if si < sectionIndex      { flat += sec.sentences.count }
+            else if si == sectionIndex { flat += sentenceIndex; break }
+        }
+        globalSentenceIndex = flat
+        savePosition()
+        state = .playing
+        speakCurrentSentence()
     }
 
     func skipToPreviousSection() {
