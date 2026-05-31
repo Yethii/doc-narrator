@@ -30,6 +30,9 @@ struct Doc_NarratorApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onOpenURL { url in
+                    LibraryStore.shared.importFromURL(url)
+                }
         }
     }
 }

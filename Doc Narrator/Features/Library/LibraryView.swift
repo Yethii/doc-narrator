@@ -6,6 +6,7 @@ struct LibraryView: View {
     @EnvironmentObject private var store: LibraryStore
     @State private var selectedPaper: Paper?
     @State private var showSettings = false
+    @State private var importError: String?
 
     var body: some View {
         NavigationStack {
@@ -62,6 +63,11 @@ struct LibraryView: View {
             }
             .navigationDestination(item: $selectedPaper) { paper in
                 ReaderView(paper: paper)
+            }
+            .onChange(of: store.incomingPaper) { _, paper in
+                guard let paper else { return }
+                selectedPaper = paper
+                store.incomingPaper = nil
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import MediaPlayer
 
 enum ReaderState: Equatable {
     case idle, processing, ready, playing, paused
@@ -41,6 +42,16 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         self.settings = settings
         self.engine = SystemTTSEngine()
         reconfigureEngine()
+        NowPlayingManager.shared.setup(
+            onPlay: { [weak self] in
+                guard let self else { return }
+                if state == .playing { pause() } else { play() }
+            },
+            onPause: { [weak self] in self?.pause() },
+            onNext: { [weak self] in self?.skipToNextSection() },
+            onPrevious: { [weak self] in self?.skipToPreviousSection() }
+        )
+        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
     // MARK: - Engine
@@ -82,15 +93,21 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
 
     func play() {
         guard state == .ready || state == .paused else { return }
-        state = .playing; speakCurrentSentence()
+        state = .playing
+        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: true)
+        speakCurrentSentence()
     }
 
     func pause() {
         guard state == .playing else { return }
         engine.pause(); sectionPauseTask?.cancel(); state = .paused
+        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
     }
 
-    func stop() { engine.stop(); sectionPauseTask?.cancel(); state = .ready }
+    func stop() {
+        engine.stop(); sectionPauseTask?.cancel(); state = .ready
+        NowPlayingManager.shared.update(title: paper.title, author: paper.authors.first ?? "", isPlaying: false)
+    }
 
     func skipToNextSection() {
         engine.stop(); sectionPauseTask?.cancel()

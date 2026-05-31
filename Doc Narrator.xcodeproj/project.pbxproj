@@ -30,33 +30,27 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx.xcframework"; path = "sherpa-onnx.xcframework"; sourceTree = SOURCE_ROOT; };
+		02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = "sherpa-onnx.xcframework"; sourceTree = SOURCE_ROOT; };
 		3172F83B2FCBAD4400BDA198 /* Doc Narrator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Doc Narrator.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8482FCBAD4500BDA198 /* Doc NarratorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8522FCBAD4500BDA198 /* Doc NarratorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		55C1424D174DA4E1C1C60C47 /* kokoro */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = kokoro; path = "Doc Narrator/kokoro"; sourceTree = SOURCE_ROOT; };
-		8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = onnxruntime.xcframework; path = onnxruntime.xcframework; sourceTree = SOURCE_ROOT; };
+		8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = onnxruntime.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3172F83D2FCBAD4400BDA198 /* Doc Narrator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Doc Narrator";
 			sourceTree = "<group>";
 		};
 		3172F84B2FCBAD4500BDA198 /* Doc NarratorTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Doc NarratorTests";
 			sourceTree = "<group>";
 		};
 		3172F8552FCBAD4500BDA198 /* Doc NarratorUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Doc NarratorUITests";
 			sourceTree = "<group>";
 		};
@@ -422,17 +416,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64/Headers",
 					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64_x86_64-simulator/Headers",
 				);
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = "Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -461,12 +451,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64/Headers",
 					"$(SRCROOT)/sherpa-onnx.xcframework/ios-arm64_x86_64-simulator/Headers",
 				);
+				INFOPLIST_FILE = "Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

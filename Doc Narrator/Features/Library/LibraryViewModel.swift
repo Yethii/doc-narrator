@@ -29,7 +29,7 @@ final class LibraryViewModel: ObservableObject {
                                                  relativeTo: nil)
             let firstText = doc.page(at: 0)?.string ?? ""
             let title = PDFProcessor.parseTitle(from: doc, firstPageText: firstText)
-            store.add(paper: Paper(title: title, bookmarkData: bookmark))
+            store.add(paper: Paper(title: title, bookmarkData: bookmark, isLocalCopy: false))
         } catch {
             importError = "Import failed: \(error.localizedDescription)"
         }

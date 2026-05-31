@@ -6,15 +6,18 @@ struct Paper: Identifiable, Codable, Hashable {
     var authors: [String]
     /// Security-scoped bookmark — persists file access across launches
     var bookmarkData: Data
-    /// Flat sentence index across all sections (for resume position)
     var lastReadSentenceIndex: Int
     var dateAdded: Date
+    /// true = we own a copy in Documents (delete on remove); false = in-place bookmark
+    var isLocalCopy: Bool
 
     init(id: UUID = UUID(), title: String, authors: [String] = [],
-         bookmarkData: Data, lastReadSentenceIndex: Int = 0, dateAdded: Date = .now) {
+         bookmarkData: Data, lastReadSentenceIndex: Int = 0,
+         dateAdded: Date = .now, isLocalCopy: Bool = true) {
         self.id = id; self.title = title; self.authors = authors
         self.bookmarkData = bookmarkData
-        self.lastReadSentenceIndex = lastReadSentenceIndex; self.dateAdded = dateAdded
+        self.lastReadSentenceIndex = lastReadSentenceIndex
+        self.dateAdded = dateAdded; self.isLocalCopy = isLocalCopy
     }
 
     /// Resolves bookmark to URL and starts security scope.
