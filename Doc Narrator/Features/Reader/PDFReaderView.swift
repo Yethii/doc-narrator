@@ -80,20 +80,25 @@ struct PDFReaderView: UIViewRepresentable {
             guard let page = pdfView.page(for: pt, nearest: true) else { return }
             let pagePt = pdfView.convert(pt, to: page)
 
-            // Character index at the tapped point → text from there forward.
-            let idx = page.characterIndex(at: pagePt)
-            guard idx >= 0, let pageText = page.string else {
-                jumpByWord(at: pagePt, page: page, vm: vm)   // fallback for margin taps
+            // Get the tapped word and build a FORWARD text selection that starts exactly
+            // at that word. Using a text selection (not characterIndex) guarantees we
+            // begin inside the tapped sentence — no boundary bleed into the previous one.
+            guard let wordSel = page.selectionForWord(at: pagePt),
+                  let word = wordSel.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !word.isEmpty else {
+                jumpByWord(at: pagePt, page: page, vm: vm)
                 return
             }
-            let ns = pageText as NSString
-            let len = min(120, ns.length - idx)
-            guard len > 0 else { return }
-            let forward = ns.substring(with: NSRange(location: idx, length: len))
-            let fc = compactAlnum(forward)               // alnum-only text starting at the tap
+            let wb = wordSel.bounds(for: page)
+            // From the word's leading edge, extend right and one line down (PDF y grows
+            // upward, so "down" = smaller y) to capture ~the next several words.
+            let startPt = CGPoint(x: wb.minX + 1, y: wb.midY)
+            let endPt   = CGPoint(x: wb.minX + 280, y: wb.minY - 25)
+            let forward = page.selection(from: startPt, to: endPt)?.string ?? word
+            let fc = compactAlnum(forward)
 
             // Match decreasing prefixes so a tap near a sentence boundary still resolves.
-            for needleLen in [28, 20, 14, 9, 6] where fc.count >= needleLen {
+            for needleLen in [28, 20, 14, 10, max(6, compactAlnum(word).count)] where fc.count >= needleLen {
                 let needle = String(fc.prefix(needleLen))
                 for (si, section) in vm.sections.enumerated() {
                     for (sj, sentence) in section.sentences.enumerated()
@@ -103,6 +108,7 @@ struct PDFReaderView: UIViewRepresentable {
                     }
                 }
             }
+            jumpByWord(at: pagePt, page: page, vm: vm)   // last resort
         }
 
         private func jumpByWord(at pagePt: CGPoint, page: PDFPage, vm: ReaderViewModel) {
