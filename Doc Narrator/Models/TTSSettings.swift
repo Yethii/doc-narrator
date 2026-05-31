@@ -10,7 +10,7 @@ enum OpenAIVoice: String, Codable, CaseIterable {
     case alloy, echo, fable, onyx, nova, shimmer
 }
 
-struct TTSSettings: Codable {
+struct TTSSettings: Codable, Equatable {
     var engineType: TTSEngineType = .kokoro
     /// AVSpeechSynthesisVoice.identifier; empty = best available en-US
     var systemVoiceIdentifier: String = ""

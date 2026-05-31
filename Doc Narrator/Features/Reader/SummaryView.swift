@@ -4,6 +4,7 @@ struct SummaryView: View {
     @ObservedObject var vm: ReaderViewModel
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var llm = LLMService.shared
+    @StateObject private var narrator = SentenceNarrator()
 
     @State private var text = ""
     @State private var isStreaming = false
@@ -12,23 +13,28 @@ struct SummaryView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let errorText {
-                    ContentUnavailableView("Couldn't summarize",
-                                           systemImage: "exclamationmark.triangle",
-                                           description: Text(errorText))
-                } else if text.isEmpty && isStreaming {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Summarizing on device…").font(.subheadline).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                Group {
+                    if let errorText {
+                        ContentUnavailableView("Couldn't summarize",
+                                               systemImage: "exclamationmark.triangle",
+                                               description: Text(errorText))
+                    } else if text.isEmpty && isStreaming {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Summarizing on device…")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        NarratableTextView(markdown: text, narrator: narrator, isStreaming: isStreaming)
                     }
-                } else {
-                    ScrollView {
-                        Text(LocalizedStringKey(text))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
-                    }
+                }
+                .frame(maxHeight: .infinity)
+
+                if !text.isEmpty && !isStreaming {
+                    Divider()
+                    NarrationControlsView(narrator: narrator)
                 }
             }
             .navigationTitle("Summary")
@@ -38,12 +44,8 @@ struct SummaryView: View {
                     Button("Done") { stop(); dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { regenerate() } label: { Image(systemName: "arrow.clockwise") }
+                    Button { regenerate() } label: { Label("Regenerate", systemImage: "arrow.clockwise") }
                         .disabled(isStreaming || !llm.isReady)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { vm.readAloud(text) } label: { Image(systemName: "speaker.wave.2.fill") }
-                        .disabled(text.isEmpty || isStreaming)
                 }
             }
             .onAppear(perform: start)
@@ -87,6 +89,6 @@ struct SummaryView: View {
     private func stop() {
         task?.cancel(); task = nil
         llm.cancel()
-        vm.stopReadAloud()
+        narrator.stop()
     }
 }

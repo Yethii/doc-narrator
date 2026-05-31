@@ -37,7 +37,8 @@ final class AppleFoundationProvider: LLMProvider {
                 let t = Task {
                     do {
                         let session = LanguageModelSession(instructions: request.system)
-                        let options = GenerationOptions(temperature: request.temperature)
+                        let options = GenerationOptions(temperature: request.temperature,
+                                                        maximumResponseTokens: request.maxTokens)
                         // Stream cumulative snapshots; emit only the new delta each time.
                         var previous = ""
                         for try await partial in session.streamResponse(to: request.user, options: options) {

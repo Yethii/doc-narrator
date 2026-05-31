@@ -85,23 +85,37 @@ final class LLMService: ObservableObject {
             }
             let task = Task {
                 do {
-                    // MAP: condense each chunk (skipped when the whole doc fits in one).
-                    let reduceInput: String
+                    // Short doc (one chunk): summarize the text directly.
                     if chunks.count == 1 {
-                        reduceInput = chunks[0]
-                    } else {
-                        var parts: [String] = []
-                        for (i, chunk) in chunks.enumerated() {
-                            try Task.checkCancellation()
-                            let part = try await self.complete(system: Self.mapSystem, user: chunk,
-                                                               maxTokens: 300, temperature: 0.2)
-                            parts.append("Section group \(i + 1):\n\(part)")
+                        for try await delta in self.stream(system: Self.reduceSystem, user: chunks[0],
+                                                           maxTokens: 450, temperature: 0.3) {
+                            continuation.yield(delta)
                         }
-                        reduceInput = parts.joined(separator: "\n\n")
+                        continuation.finish(); return
+                    }
+                    // MAP: condense each chunk to a few sentences.
+                    var summaries: [String] = []
+                    for chunk in chunks {
+                        try Task.checkCancellation()
+                        let part = try await self.complete(system: Self.mapSystem, user: chunk,
+                                                           maxTokens: 160, temperature: 0.2)
+                        summaries.append(part)
+                    }
+                    // FOLD: if the combined summaries are still too big for one pass,
+                    // re-summarize them in groups until they fit.
+                    while Self.combinedLength(summaries) > Self.foldCharBudget && summaries.count > 1 {
+                        var folded: [String] = []
+                        for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
+                            try Task.checkCancellation()
+                            folded.append(try await self.complete(system: Self.mapSystem, user: group,
+                                                                  maxTokens: 160, temperature: 0.2))
+                        }
+                        summaries = folded
                     }
                     // REDUCE: stream the final reader-facing summary.
+                    let reduceInput = summaries.joined(separator: "\n\n")
                     for try await delta in self.stream(system: Self.reduceSystem, user: reduceInput,
-                                                       maxTokens: 700, temperature: 0.3) {
+                                                       maxTokens: 450, temperature: 0.3) {
                         continuation.yield(delta)
                     }
                     continuation.finish()
@@ -127,9 +141,16 @@ final class LLMService: ObservableObject {
         "**Key points**\n- 4–7 bullet points of the most important takeaways.\n\n" +
         "Be concise and faithful to the source; do not invent details."
 
-    /// Flatten sections into text and split into context-sized chunks on paragraph boundaries.
-    private static func buildChunks(from sections: [PaperSection],
-                                    maxChars: Int = 6000, maxChunks: Int = 8) -> [String] {
+    // Apple's on-device model has a small (~4k token) context shared by input + output.
+    // Keep each model call's input well under that. ~3 chars/token, so ~2800 chars ≈ ~950 tokens.
+    private static let chunkCharBudget = 2800
+    private static let foldCharBudget = 3000   // max combined map-summary chars per reduce pass
+    private static let maxChunks = 24          // bound total map calls (and time) on huge docs
+
+    /// Flatten sections into text and split into context-sized chunks. Each chunk is hard-capped
+    /// in size (never merges overflow into one giant chunk). Very long docs are sampled evenly
+    /// to `maxChunks` so the map step stays bounded.
+    private static func buildChunks(from sections: [PaperSection]) -> [String] {
         var blocks: [String] = []
         for s in sections {
             if s.type == .sectionHeader {
@@ -143,22 +164,57 @@ final class LLMService: ObservableObject {
         let full = blocks.joined(separator: "\n\n")
         guard !full.isEmpty else { return [] }
 
+        // Split on paragraph boundaries, but also hard-split any single paragraph
+        // that exceeds the budget so no chunk is oversized.
         var chunks: [String] = []
         var current = ""
+        func flush() { if !current.isEmpty { chunks.append(current); current = "" } }
         for para in full.components(separatedBy: "\n\n") {
-            if !current.isEmpty && current.count + para.count > maxChars {
-                chunks.append(current); current = ""
+            for piece in para.chunked(into: chunkCharBudget) {
+                if !current.isEmpty && current.count + piece.count > chunkCharBudget { flush() }
+                current += current.isEmpty ? piece : "\n\n" + piece
             }
-            current += current.isEmpty ? para : "\n\n" + para
         }
-        if !current.isEmpty { chunks.append(current) }
+        flush()
 
-        // Cap chunk count: merge any overflow into the final chunk.
+        // Bound the number of chunks by sampling evenly (keeps coverage across the paper).
         if chunks.count > maxChunks {
-            let head = Array(chunks.prefix(maxChunks - 1))
-            let tail = chunks[(maxChunks - 1)...].joined(separator: "\n\n")
-            chunks = head + [tail]
+            let step = Double(chunks.count) / Double(maxChunks)
+            chunks = (0..<maxChunks).map { chunks[Int(Double($0) * step)] }
         }
         return chunks
+    }
+
+    private static func combinedLength(_ parts: [String]) -> Int {
+        parts.reduce(0) { $0 + $1.count + 2 }
+    }
+
+    /// Group strings so each group's combined length stays under `maxChars`.
+    private static func group(_ parts: [String], maxChars: Int) -> [String] {
+        var groups: [String] = []
+        var current = ""
+        for p in parts {
+            if !current.isEmpty && current.count + p.count > maxChars {
+                groups.append(current); current = ""
+            }
+            current += current.isEmpty ? p : "\n\n" + p
+        }
+        if !current.isEmpty { groups.append(current) }
+        return groups
+    }
+}
+
+private extension String {
+    /// Split into pieces of at most `size` characters (on a best-effort whitespace boundary).
+    func chunked(into size: Int) -> [String] {
+        guard count > size else { return [self] }
+        var pieces: [String] = []
+        var idx = startIndex
+        while idx < endIndex {
+            let end = index(idx, offsetBy: size, limitedBy: endIndex) ?? endIndex
+            pieces.append(String(self[idx..<end]))
+            idx = end
+        }
+        return pieces
     }
 }
