@@ -12,7 +12,10 @@ private actor SynthesisSerializer {
     init(tts: OpaquePointer) { self.tts = tts }
 
     func synthesize(text: String, voiceID: Int32, speed: Float) -> Data? {
-        text.withCString { cText -> Data? in
+        // If the calling task was cancelled while waiting in the actor queue,
+        // skip the expensive C call immediately — drains backlogs from rapid pause/play.
+        guard !Task.isCancelled else { return nil }
+        return text.withCString { cText -> Data? in
             var genCfg = SherpaOnnxGenerationConfig()
             genCfg.sid   = voiceID
             genCfg.speed = speed
