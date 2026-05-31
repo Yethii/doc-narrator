@@ -228,11 +228,16 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         guard currentSectionIndex < sections.count else { return }
         let section = sections[currentSectionIndex]
         guard section.type == .body || section.type == .abstract else { return }
-        let nextSj = currentSentenceIndex + 1
-        guard nextSj < section.sentences.count else { return }
-        engine.prefetch(sentence: section.sentences[nextSj],
-                        at: globalSentenceIndex + 1,
-                        rate: settings.rate)
+        // Synthesize a WINDOW of upcoming sentences so playback never waits on synthesis,
+        // even when the CPU is busy. The engine buffers them; topped up after each sentence.
+        let window = 4
+        for offset in 1...window {
+            let sj = currentSentenceIndex + offset
+            guard sj < section.sentences.count else { break }
+            engine.prefetch(sentence: section.sentences[sj],
+                            at: globalSentenceIndex + offset,
+                            rate: settings.rate)
+        }
     }
 
     // MARK: - TTSEngineDelegate

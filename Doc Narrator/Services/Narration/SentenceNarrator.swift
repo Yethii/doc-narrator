@@ -99,9 +99,11 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
         e.delegate = self                 // claim the (possibly shared) engine while we read
         isBuffering = true
         e.speak(sentence: sentences[currentIndex], at: Self.indexBase + currentIndex, rate: settings.rate)
-        let next = currentIndex + 1
-        if next < sentences.count {
-            e.prefetch(sentence: sentences[next], at: Self.indexBase + next, rate: settings.rate)
+        // Synthesize a window ahead so narration never pauses between sentences.
+        for offset in 1...4 {
+            let n = currentIndex + offset
+            guard n < sentences.count else { break }
+            e.prefetch(sentence: sentences[n], at: Self.indexBase + n, rate: settings.rate)
         }
     }
 

@@ -55,10 +55,10 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
     private var currentIndex: Int = 0
     private var currentTask:  Task<Void, Never>?
 
-    // Prefetch pipeline: while sentence N plays, synthesize N+1 in the background.
-    // prefetchTask returns Data? directly — no shared cache, no race with removeAll().
-    private var prefetchedIndex: Int = -1
-    private var prefetchTask: Task<Data?, Never>?
+    // Multi-sentence synthesis buffer: several upcoming sentences are synthesized ahead
+    // (keyed by sentence index) so playback never waits on synthesis — even when the CPU
+    // is busy (e.g. an LLM summary generating). Jobs run serially on the SynthesisSerializer.
+    private var synthJobs: [Int: Task<Data?, Never>] = [:]
 
     var voiceID: Int32 = 0
     var speed:   Float = 1.0
@@ -104,43 +104,39 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
         isPaused     = false
         speed        = 0.7 + rate * 0.8
 
-        if index == prefetchedIndex, let job = prefetchTask {
-            // Prefetch task is running (or done) for this exact sentence index.
-            // Await its return value directly — no shared cache involved.
-            let capturedJob = job
-            prefetchTask    = nil
-            prefetchedIndex = -1
-            currentTask = Task { [weak self] in
-                guard let self else { return }
-                let data = await capturedJob.value   // wait for synthesis → returns Data?
-                guard !Task.isCancelled, !self.isPaused else { self.isSpeaking = false; return }
-                await self.playOrSkip(data: data)
-            }
-        } else {
-            // Prefetch miss — synthesize fresh. Cancel stale prefetch first.
-            prefetchTask?.cancel()
-            prefetchTask    = nil
-            prefetchedIndex = -1
-            currentTask = Task { [weak self] in await self?.synthesizeAndPlay(sentence) }
+        // Reuse the already-running/finished synthesis for this sentence if we prefetched it.
+        let job = synthJobs[index] ?? makeSynthJob(sentence: sentence, rate: rate)
+        synthJobs[index] = nil
+        pruneJobs(before: index)   // drop buffers we've moved past
+
+        currentTask = Task { [weak self] in
+            guard let self else { return }
+            let data = await job.value
+            guard !Task.isCancelled, !self.isPaused else { self.isSpeaking = false; return }
+            await self.playOrSkip(data: data)
         }
     }
 
     func prefetch(sentence: String, at index: Int, rate: Float) {
-        guard index != prefetchedIndex else { return }
-        prefetchTask?.cancel()
-        prefetchedIndex     = index
+        guard index != currentIndex, synthJobs[index] == nil else { return }
+        synthJobs[index] = makeSynthJob(sentence: sentence, rate: rate)
+    }
+
+    /// Start synthesizing one sentence on the serializer; returns the audio when done.
+    private func makeSynthJob(sentence: String, rate: Float) -> Task<Data?, Never> {
         let capturedSpeed   = 0.7 + rate * 0.8
         let capturedVoiceID = voiceID
-        // Task<Data?, Never>: returns synthesized WAV directly so speak() can await it
-        // without any intervening shared state that could be wiped by a racing call.
-        let prefetchJob: Task<Data?, Never> = Task { [weak self] in
+        return Task { [weak self] in
             guard let self, let synth = await self.ensureSynthesizer() else { return nil }
             guard !Task.isCancelled else { return nil }
-            // SynthesisSerializer actor serializes this with the current synthesis —
-            // S(n+1) only starts after S(n) finishes, then overlaps with S(n) playback.
             return await synth.synthesize(text: sentence, voiceID: capturedVoiceID, speed: capturedSpeed)
         }
-        prefetchTask = prefetchJob
+    }
+
+    private func pruneJobs(before index: Int) {
+        for (i, job) in synthJobs where i < index {
+            job.cancel(); synthJobs[i] = nil
+        }
     }
 
     func pause()  { audioPlayer?.pause(); isSpeaking = false; isPaused = true  }
@@ -148,27 +144,12 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
 
     func stop() {
         currentTask?.cancel()
-        prefetchTask?.cancel()
-        prefetchTask    = nil
-        prefetchedIndex = -1
+        for (_, job) in synthJobs { job.cancel() }
+        synthJobs.removeAll()
         audioPlayer?.stop()
         audioPlayer = nil
         isSpeaking  = false
         isPaused    = false
-    }
-
-    // MARK: - Synthesis
-
-    @MainActor
-    private func synthesizeAndPlay(_ text: String) async {
-        guard let synth = await ensureSynthesizer() else {
-            delegate?.engine(self, didFailWithError: KokoroError.modelNotLoaded)
-            return
-        }
-        guard !Task.isCancelled else { return }
-        let data = await synth.synthesize(text: text, voiceID: voiceID, speed: speed)
-        guard !Task.isCancelled, !isPaused else { isSpeaking = false; return }
-        await playOrSkip(data: data)
     }
 
     @MainActor

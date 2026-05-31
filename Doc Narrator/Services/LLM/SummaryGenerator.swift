@@ -73,17 +73,25 @@ final class SummaryGenerator: ObservableObject {
             ? llm.focusedSummary(topic: topic!, sections: sections)
             : llm.summarize(sections: sections)
 
-        job.task = Task { [weak self, weak job] in
+        // Lower priority so foreground TTS/UI win the CPU; throttle UI updates so the main
+        // thread isn't hammered per token (keeps the reader's highlight responsive).
+        // Lower priority so foreground TTS/UI win the CPU; throttle UI updates so the main
+        // thread isn't touched per token (keeps the reader's highlight responsive).
+        job.task = Task(priority: .utility) { [weak self, weak job] in
             guard let job else { return }
             // Grab extra background time so a brief lock/backgrounding doesn't suspend us mid-run.
             let bg = await UIApplication.shared.beginBackgroundTask(withName: "summary-\(job.id)")
             defer { Task { @MainActor in UIApplication.shared.endBackgroundTask(bg) } }
             do {
                 var acc = ""
+                var lastFlush = Date.distantPast
                 for try await delta in stream {
                     acc += delta
-                    job.text = acc
+                    if Date().timeIntervalSince(lastFlush) > 0.2 {
+                        lastFlush = Date(); job.text = acc
+                    }
                 }
+                job.text = acc
                 job.isGenerating = false
                 self?.finish(job, success: true)
             } catch is CancellationError {
