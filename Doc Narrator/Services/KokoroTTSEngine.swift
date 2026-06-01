@@ -71,6 +71,12 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
             else          { log.info("Kokoro TTS engine ready") }
             return ptr
         }
+        // Warm up the ONNX graph at launch so the FIRST real sentence isn't slow.
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self, let synth = await self.ensureSynthesizer() else { return }
+            _ = await synth.synthesize(text: "Ready.", voiceID: 0, speed: 1.0)
+            log.info("Kokoro warmed up")
+        }
     }
 
     deinit {
@@ -214,7 +220,7 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
 
         var modelCfg = SherpaOnnxOfflineTtsModelConfig()
         modelCfg.kokoro      = kokoro
-        modelCfg.num_threads = 2
+        modelCfg.num_threads = 4   // iPhone 15 Pro+ has cores to spare; faster synthesis
         modelCfg.debug       = 0
         modelCfg.provider    = cpuNS.utf8String
 

@@ -73,6 +73,30 @@ final class LLMService: ObservableObject {
                                                       maxTokens: maxTokens, temperature: temperature))
     }
 
+    /// Stream into a continuation, retrying the whole stream with backoff if the model
+    /// rate-limits *before any tokens arrive* (can't cleanly resume mid-stream).
+    private func streamInto(_ continuation: AsyncThrowingStream<String, Error>.Continuation,
+                            system: String, user: String,
+                            maxTokens: Int, temperature: Double) async throws {
+        var delay: UInt64 = 1_000_000_000
+        for attempt in 0..<4 {
+            var yielded = false
+            do {
+                for try await delta in stream(system: system, user: user,
+                                              maxTokens: maxTokens, temperature: temperature) {
+                    yielded = true
+                    continuation.yield(delta)
+                }
+                return
+            } catch {
+                let msg = String(describing: error).lowercased()
+                let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
+                guard isRateLimit, !yielded, attempt < 3 else { throw error }
+                try await Task.sleep(nanoseconds: delay); delay *= 2
+            }
+        }
+    }
+
     /// `complete` with exponential backoff on the on-device model's rate limit.
     private func completeRetrying(system: String, user: String,
                                   maxTokens: Int, temperature: Double) async throws -> String {
@@ -129,10 +153,8 @@ final class LLMService: ObservableObject {
             let task = Task {
                 do {
                     if chunks.count == 1 {
-                        for try await delta in self.stream(system: reduceSystem, user: chunks[0],
-                                                           maxTokens: 600, temperature: 0.3) {
-                            continuation.yield(delta)
-                        }
+                        try await self.streamInto(continuation, system: reduceSystem, user: chunks[0],
+                                                  maxTokens: 600, temperature: 0.3)
                         continuation.finish(); return
                     }
                     // MAP: condense each chunk (all chunks — never silently drop content).
@@ -158,11 +180,9 @@ final class LLMService: ObservableObject {
                     }
                     try await Task.sleep(nanoseconds: 350_000_000)
                     // REDUCE: stream the final reader-facing summary.
-                    for try await delta in self.stream(system: reduceSystem,
-                                                       user: summaries.joined(separator: "\n\n"),
-                                                       maxTokens: 600, temperature: 0.3) {
-                        continuation.yield(delta)
-                    }
+                    try await self.streamInto(continuation, system: reduceSystem,
+                                              user: summaries.joined(separator: "\n\n"),
+                                              maxTokens: 600, temperature: 0.3)
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish(throwing: LLMError.cancelled)
