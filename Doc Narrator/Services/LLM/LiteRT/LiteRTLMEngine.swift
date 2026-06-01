@@ -138,8 +138,11 @@ public final class LiteRTLMEngine: @unchecked Sendable {
                         // (This matches LiteRT-LM's own multimodal_main.py example which sets
                         // audio_backend=CPU explicitly. The GPU path for vision/audio causes
                         // `litert_lm_conversation_create` to return NULL on iOS.)
+                        // Text-only: pass nil vision/audio backends so the engine never
+                        // initializes the model's vision encoder (this multimodal Gemma's vision
+                        // encoder has 3 signatures, which the runtime rejects → engine_create NULL).
                         guard let settings = litert_lm_engine_settings_create(
-                            path, backendStr, "cpu", "cpu"
+                            path, backendStr, nil, nil
                         ) else {
                             throw LiteRTLMError.engineCreationFailed("Failed to create engine settings")
                         }
