@@ -7,6 +7,8 @@ struct LibraryView: View {
     @State private var selectedPaper: Paper?
     @State private var showSettings = false
     @State private var importError: String?
+    @State private var showPaste = false
+    @State private var showWeb = false
 
     var body: some View {
         NavigationStack {
@@ -41,7 +43,13 @@ struct LibraryView: View {
                     Button("Settings", systemImage: "gear") { showSettings = true }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import PDF", systemImage: "plus") { vm.isImporting = true }
+                    Menu {
+                        Button { vm.isImporting = true } label: { Label("Import PDF", systemImage: "doc") }
+                        Button { showPaste = true } label: { Label("Paste Text", systemImage: "doc.text") }
+                        Button { showWeb = true } label: { Label("From Web Link", systemImage: "link") }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
                 }
             }
             .fileImporter(isPresented: $vm.isImporting,
@@ -67,6 +75,12 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showPaste) {
+                PasteTextView()
+            }
+            .sheet(isPresented: $showWeb) {
+                WebLinkView()
             }
         }
     }

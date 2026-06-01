@@ -78,8 +78,8 @@ final class LLMService: ObservableObject {
     private func streamInto(_ continuation: AsyncThrowingStream<String, Error>.Continuation,
                             system: String, user: String,
                             maxTokens: Int, temperature: Double) async throws {
-        var delay: UInt64 = 1_000_000_000
-        for attempt in 0..<4 {
+        var delay: UInt64 = 2_000_000_000
+        for attempt in 0..<5 {
             var yielded = false
             do {
                 for try await delta in stream(system: system, user: user,
@@ -91,7 +91,7 @@ final class LLMService: ObservableObject {
             } catch {
                 let msg = String(describing: error).lowercased()
                 let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
-                guard isRateLimit, !yielded, attempt < 3 else { throw error }
+                guard isRateLimit, !yielded, attempt < 4 else { throw error }
                 try await Task.sleep(nanoseconds: delay); delay *= 2
             }
         }
@@ -100,15 +100,15 @@ final class LLMService: ObservableObject {
     /// `complete` with exponential backoff on the on-device model's rate limit.
     private func completeRetrying(system: String, user: String,
                                   maxTokens: Int, temperature: Double) async throws -> String {
-        var delay: UInt64 = 1_000_000_000   // 1s
-        for attempt in 0..<4 {
+        var delay: UInt64 = 2_000_000_000   // 2s
+        for attempt in 0..<5 {
             do {
                 return try await complete(system: system, user: user,
                                           maxTokens: maxTokens, temperature: temperature)
             } catch {
                 let msg = String(describing: error).lowercased()
                 let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
-                guard isRateLimit, attempt < 3 else { throw error }
+                guard isRateLimit, attempt < 4 else { throw error }
                 try await Task.sleep(nanoseconds: delay)
                 delay *= 2
             }
@@ -162,9 +162,9 @@ final class LLMService: ObservableObject {
                     var summaries: [String] = []
                     for (i, chunk) in chunks.enumerated() {
                         try Task.checkCancellation()
-                        if i > 0 { try await Task.sleep(nanoseconds: 350_000_000) }
+                        if i > 0 { try await Task.sleep(nanoseconds: 1_000_000_000) }
                         let part = try await self.completeRetrying(system: Self.mapSystem, user: chunk,
-                                                                   maxTokens: 220, temperature: 0.2)
+                                                                   maxTokens: 200, temperature: 0.2)
                         summaries.append(part)
                     }
                     // FOLD: re-summarize in groups until the combined text fits one reduce pass.
@@ -172,13 +172,13 @@ final class LLMService: ObservableObject {
                         var folded: [String] = []
                         for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
                             try Task.checkCancellation()
-                            try await Task.sleep(nanoseconds: 350_000_000)
+                            try await Task.sleep(nanoseconds: 1_000_000_000)
                             folded.append(try await self.completeRetrying(system: Self.mapSystem, user: group,
-                                                                          maxTokens: 220, temperature: 0.2))
+                                                                          maxTokens: 200, temperature: 0.2))
                         }
                         summaries = folded
                     }
-                    try await Task.sleep(nanoseconds: 350_000_000)
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
                     // REDUCE: stream the final reader-facing summary.
                     try await self.streamInto(continuation, system: reduceSystem,
                                               user: summaries.joined(separator: "\n\n"),
@@ -209,8 +209,8 @@ final class LLMService: ObservableObject {
     // Apple's on-device model has a ~4k-token context shared by input + output. Use large
     // chunks (~7000 chars ≈ ~2300 tokens, leaving room for the capped output) so a typical
     // paper needs only a handful of calls — fewer calls = far less chance of rate limiting.
-    private static let chunkCharBudget = 7000
-    private static let foldCharBudget = 7000   // max combined map-summary chars per reduce pass
+    private static let chunkCharBudget = 8000
+    private static let foldCharBudget = 8000   // max combined map-summary chars per reduce pass
 
     /// Flatten sections into text and split into context-sized chunks. Each chunk is hard-capped
     /// in size (never merges overflow into one giant chunk). ALL chunks are summarized — content

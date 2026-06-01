@@ -17,6 +17,19 @@ final class LibraryStore: ObservableObject {
 
     func add(paper: Paper) { papers.append(paper); save() }
 
+    /// Add a PDF we generated locally (from pasted text or a web page). We own the file, so it's
+    /// a local copy that gets deleted when the paper is removed.
+    func addGeneratedPDF(at url: URL, title: String) {
+        do {
+            let bookmark = try url.bookmarkData(options: .minimalBookmark,
+                                                includingResourceValuesForKeys: nil, relativeTo: nil)
+            let paper = Paper(title: title.isEmpty ? "Untitled" : title, authors: [],
+                              bookmarkData: bookmark, isLocalCopy: true)
+            add(paper: paper)
+            incomingPaper = paper
+        } catch {}
+    }
+
     func update(paper: Paper) {
         guard let idx = papers.firstIndex(where: { $0.id == paper.id }) else { return }
         papers[idx] = paper; save()
