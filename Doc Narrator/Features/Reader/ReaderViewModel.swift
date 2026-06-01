@@ -44,6 +44,10 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
     var paper: Paper
     private(set) var engine: any TTSEngine
     private var sectionPauseTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
+    /// True when we auto-paused the document because a summary started generating, so we
+    /// can auto-resume when it finishes (an LLM + TTS can't both run full speed on-device).
+    private var pausedForGeneration = false
 
     /// Total speakable (non-header) sentences in the document.
     var totalSentences: Int {
@@ -63,6 +67,28 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         self.engine = SystemTTSEngine()
         reconfigureEngine()
         PlaybackCoordinator.shared.activeReader = self
+
+        // Auto-pause narration while a summary generates (they compete for the chip), and
+        // auto-resume when it's done — fires only on true↔false transitions.
+        SummaryGenerator.shared.$jobs
+            .map { jobs in jobs.contains { $0.isGenerating } }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] generating in self?.handleGenerationState(generating) }
+            .store(in: &cancellables)
+    }
+
+    private func handleGenerationState(_ generating: Bool) {
+        if generating {
+            if state == .playing {
+                pausedForGeneration = true
+                engine.flushPrefetch()   // stop pending synthesis so the CPU is actually freed
+                pause()
+            }
+        } else if pausedForGeneration {
+            pausedForGeneration = false
+            if state == .paused { play() }
+        }
     }
 
     // MARK: - Engine
