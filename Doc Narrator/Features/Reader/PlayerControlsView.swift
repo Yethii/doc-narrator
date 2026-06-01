@@ -5,6 +5,8 @@ struct PlayerControlsView: View {
     @ObservedObject private var generator = SummaryGenerator.shared
     @State private var scrubValue: Double = 0
     @State private var scrubbing = false
+    @State private var bannerFlash = false
+    @State private var flashTask: Task<Void, Never>?
 
     // Display the rate (0...1) as a speech-speed multiplier (0.5×–1.5×, 1× = normal).
     private var speedLabel: String {
@@ -20,16 +22,22 @@ struct PlayerControlsView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // Honest status: while a summary generates on-device it competes with TTS for the
-            // chip, so narration can lag/pause until it finishes.
+            // While a summary generates on-device it competes with TTS for the chip, so
+            // narration is paused until it's done. Tapping play flashes this notice.
             if generator.isGenerating {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.mini)
-                    Text("Summarizing on device — narration pauses and resumes when it's ready.")
+                    Text("Generating summary — narration will resume when it's ready.")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(bannerFlash ? .primary : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(bannerFlash ? Color.orange.opacity(0.18) : Color.clear)
+                )
+                .animation(.easeInOut(duration: 0.2), value: bannerFlash)
             }
 
             // Progress scrubber, with a centered "current / total" sentence count beneath.
@@ -92,8 +100,21 @@ struct PlayerControlsView: View {
         .disabled(!vm.state.isInteractable)
     }
 
+    // Flash the "generating" notice; auto-clears 5s after the LAST tap (debounced).
+    private func flashBanner() {
+        bannerFlash = true
+        flashTask?.cancel()
+        flashTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if !Task.isCancelled { bannerFlash = false }
+        }
+    }
+
     private var playPauseButton: some View {
         Button {
+            // Don't start narration while a summary generates — it would re-introduce the
+            // contention. Flash the notice instead.
+            if generator.isGenerating { flashBanner(); return }
             vm.state == .playing ? vm.pause() : vm.play()
         } label: {
             Group {

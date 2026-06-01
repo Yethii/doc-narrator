@@ -99,6 +99,7 @@ final class SummaryGenerator: ObservableObject {
                 self?.finish(job, success: true)
             } catch is CancellationError {
                 job.isGenerating = false
+                self?.jobs.removeAll { $0.id == job.id }
             } catch {
                 job.error = (error as? LLMError)?.errorDescription ?? error.localizedDescription
                 job.isGenerating = false
@@ -120,17 +121,17 @@ final class SummaryGenerator: ObservableObject {
                                            topic: job.topic, modelLabel: job.modelLabel, markdown: job.text)
             SessionStore.updateSummary(artifact)
             notify(job)
+            jobs.removeAll { $0.id == job.id }   // the saved artifact now represents it
         }
-        // Drop the job — the saved artifact now represents it. Views holding a reference keep
-        // showing the final text.
-        jobs.removeAll { $0.id == job.id }
+        // On failure: KEEP the job (error set, isGenerating == false) so the user can see the
+        // reason and retry, instead of it silently disappearing.
     }
 
     private func notify(_ job: Job) {
         let content = UNMutableNotificationContent()
         content.title = "Summary ready"
         content.body = "“\(job.title)” for \(job.paperTitle) is ready to read."
-        content.sound = .default
+        // No sound: a notification sound interrupts the AVAudioSession and pauses narration.
         let request = UNNotificationRequest(identifier: job.id.uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }

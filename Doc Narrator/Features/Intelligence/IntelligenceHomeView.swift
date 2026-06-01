@@ -24,7 +24,7 @@ struct IntelligenceHomeView: View {
             }
 
             Section("Summaries") {
-                // In-flight generations (keep running even if you leave this page).
+                // In-flight (and failed) generations — keep running / visible even if you leave.
                 ForEach(liveJobs) { job in
                     NavigationLink {
                         SummaryArtifactView(paper: vm.paper, sections: vm.sections, job: job)
@@ -32,6 +32,7 @@ struct IntelligenceHomeView: View {
                         jobRow(job)
                     }
                 }
+                .onDelete(perform: dismissJobs)
 
                 ForEach(sessions.summaries) { artifact in
                     NavigationLink {
@@ -87,13 +88,24 @@ struct IntelligenceHomeView: View {
 
     private func jobRow(_ job: SummaryGenerator.Job) -> some View {
         HStack(spacing: 10) {
-            ProgressView()
+            if job.error != nil {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            } else {
+                ProgressView()
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.title).font(.headline).lineLimit(1)
-                Text("Generating…").font(.caption).foregroundStyle(.secondary)
+                Text(job.error == nil ? "Generating…" : "Failed — tap to retry")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func dismissJobs(_ offsets: IndexSet) {
+        let jobs = liveJobs
+        for i in offsets where i < jobs.count { generator.cancel(id: jobs[i].id) }
     }
 
     private func summaryRow(_ a: SummaryArtifact) -> some View {

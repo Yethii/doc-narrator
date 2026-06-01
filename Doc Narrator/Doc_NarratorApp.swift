@@ -14,7 +14,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationDelegate()
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async
-        -> UNNotificationPresentationOptions { [.banner, .sound] }
+        -> UNNotificationPresentationOptions { [.banner] }   // no sound — would pause narration
 }
 
 @main

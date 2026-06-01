@@ -77,10 +77,26 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
             _ = await synth.synthesize(text: "Ready.", voiceID: 0, speed: 1.0)
             log.info("Kokoro warmed up")
         }
+        // Resume after an audio-session interruption (e.g. a notification sound, a call, Siri)
+        // so narration doesn't silently stop.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleInterruption),
+            name: AVAudioSession.interruptionNotification, object: nil)
+    }
+
+    @objc private func handleInterruption(_ note: Notification) {
+        guard let info = note.userInfo,
+              let typeRaw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else { return }
+        if type == .ended, isSpeaking, !isPaused {
+            try? AVAudioSession.sharedInstance().setActive(true)
+            audioPlayer?.play()
+        }
     }
 
     deinit {
         loadTask?.cancel()
+        NotificationCenter.default.removeObserver(self)
         if let ptr = ttsPtr { SherpaOnnxDestroyOfflineTts(ptr) }
     }
 
