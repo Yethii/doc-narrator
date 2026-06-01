@@ -7,6 +7,38 @@ struct SettingsView: View {
     @State private var settings = TTSSettings.load()
     @State private var voices: [AVSpeechSynthesisVoice] = []
     @ObservedObject private var llm = LLMService.shared
+    @ObservedObject private var gemma = LiteRTManager.shared
+
+    @ViewBuilder private var gemmaModelRow: some View {
+        if gemma.isDownloaded {
+            HStack {
+                Label("\(gemma.modelName) — installed", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Spacer()
+                Button("Delete", role: .destructive) { gemma.deleteModel() }
+                    .buttonStyle(.borderless)
+            }
+        } else if gemma.isDownloading {
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: gemma.progress) {
+                    Text("Downloading \(gemma.modelName)…").font(.caption)
+                }
+                Button("Cancel", role: .cancel) { gemma.cancelDownload() }
+                    .buttonStyle(.borderless)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Button { gemma.startDownload() } label: {
+                    Label("Download \(gemma.modelName) (\(gemma.approxSizeText))", systemImage: "arrow.down.circle")
+                }
+                if let err = gemma.downloadError {
+                    Text(err).font(.caption).foregroundStyle(.red)
+                }
+                Text("Downloads once over Wi-Fi and runs fully on device. Larger and slower to start than the Apple model, but more reliable.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,6 +56,9 @@ struct SettingsView: View {
                                 .frame(width: 8, height: 8)
                             Text(llm.statusText).foregroundStyle(.secondary)
                         }
+                    }
+                    if llm.settings.providerType == .mlxLocal {
+                        gemmaModelRow
                     }
                     if llm.settings.providerType != .off {
                         Picker("Narration", selection: $llm.settings.narrationMode) {

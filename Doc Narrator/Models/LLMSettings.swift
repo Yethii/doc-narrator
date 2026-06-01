@@ -3,7 +3,7 @@ import Foundation
 /// Which on-device LLM backend powers the intelligence features.
 enum LLMProviderType: String, Codable, CaseIterable {
     case appleFoundation = "Apple (built-in)"
-    case mlxLocal        = "Open model (downloaded)"
+    case mlxLocal        = "Gemma (on-device)"
     case off             = "Off"
 }
 

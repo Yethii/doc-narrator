@@ -41,7 +41,7 @@ final class LLMService: ObservableObject {
         case .appleFoundation:
             provider = AppleFoundationProvider()
         case .mlxLocal:
-            provider = nil   // Phase 4
+            provider = LiteRTProvider()   // downloadable Gemma via LiteRT-LM
         case .off:
             provider = nil
         }

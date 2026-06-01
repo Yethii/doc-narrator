@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		CD5A7AED844F717B78973CCA /* onnxruntime.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */; };
 		DD8858D0E4C1539B2E1424F4 /* sherpa-onnx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */; };
+		FE00000000000000000000A2 /* LiteRTLM.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FE00000000000000000000A1 /* LiteRTLM.xcframework */; };
+		FE00000000000000000000A3 /* LiteRTLM.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FE00000000000000000000A1 /* LiteRTLM.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DE60E273C976E13C12AD0E2D /* kokoro in Resources */ = {isa = PBXBuildFile; fileRef = 55C1424D174DA4E1C1C60C47 /* kokoro */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +33,7 @@
 
 /* Begin PBXFileReference section */
 		02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = "sherpa-onnx.xcframework"; sourceTree = SOURCE_ROOT; };
+		FE00000000000000000000A1 /* LiteRTLM.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = LiteRTLM.xcframework; sourceTree = SOURCE_ROOT; };
 		3172F83B2FCBAD4400BDA198 /* Doc Narrator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Doc Narrator.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8482FCBAD4500BDA198 /* Doc NarratorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3172F8522FCBAD4500BDA198 /* Doc NarratorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Doc NarratorUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -63,6 +66,7 @@
 			files = (
 				DD8858D0E4C1539B2E1424F4 /* sherpa-onnx.xcframework in Frameworks */,
 				CD5A7AED844F717B78973CCA /* onnxruntime.xcframework in Frameworks */,
+				FE00000000000000000000A2 /* LiteRTLM.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +85,37 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FE00000000000000000000A4 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				FE00000000000000000000A3 /* LiteRTLM.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		FE00000000000000000000A5 /* Re-sign nested dylib */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Re-sign nested dylib";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "FW=\"${CODESIGNING_FOLDER_PATH}/Frameworks/CLiteRTLM.framework\"\nif [ -d \"$FW\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ]; then\n  codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$FW/libGemmaModelConstraintProvider.dylib\"\n  codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"$FW\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXGroup section */
 		3172F8322FCBAD4400BDA198 = {
@@ -110,6 +145,7 @@
 			children = (
 				02AD9965AB7C055A93E1FA61 /* sherpa-onnx.xcframework */,
 				8AAB83B1F088771C9F9EEB23 /* onnxruntime.xcframework */,
+				FE00000000000000000000A1 /* LiteRTLM.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -124,6 +160,8 @@
 				3172F8372FCBAD4400BDA198 /* Sources */,
 				3172F8382FCBAD4400BDA198 /* Frameworks */,
 				3172F8392FCBAD4400BDA198 /* Resources */,
+				FE00000000000000000000A4 /* Embed Frameworks */,
+				FE00000000000000000000A5 /* Re-sign nested dylib */,
 			);
 			buildRules = (
 			);
@@ -416,6 +454,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -451,6 +494,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = AS48H425CW;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
