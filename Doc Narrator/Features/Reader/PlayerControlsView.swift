@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlayerControlsView: View {
     @ObservedObject var vm: ReaderViewModel
+    @ObservedObject private var generator = SummaryGenerator.shared
     @State private var scrubValue: Double = 0
     @State private var scrubbing = false
 
@@ -19,6 +20,18 @@ struct PlayerControlsView: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            // Honest status: while a summary generates on-device it competes with TTS for the
+            // chip, so narration can lag/pause until it finishes.
+            if generator.isGenerating {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.mini)
+                    Text("Summarizing on device — narration may pause until it finishes.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             // Progress scrubber, with a centered "current / total" sentence count beneath.
             VStack(spacing: 4) {
                 Slider(value: $scrubValue, in: 0...1) { editing in

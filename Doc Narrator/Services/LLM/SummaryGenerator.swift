@@ -44,6 +44,9 @@ final class SummaryGenerator: ObservableObject {
 
     @Published private(set) var jobs: [Job] = []
 
+    /// True while any summary is being generated (it competes with TTS for the chip).
+    var isGenerating: Bool { jobs.contains { $0.isGenerating } }
+
     private init() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
