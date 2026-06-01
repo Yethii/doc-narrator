@@ -19,6 +19,15 @@ enum Markdown {
         sub(#"(?m)^\s*([-*+]|\d+[.)])\s+"#, "")             // list markers
         sub(#"(?m)^\s*([-*_]\s*){3,}$"#, " ")               // horizontal rules
         sub(#"(\*\*|\*|__|_|~~)"#, "")                      // bold / italic / strike
+        // LaTeX / math cleanup — models emit "$\Delta V$", "\text{ m/s}", "$S\#$" etc.
+        // Convert to readable words so it neither displays nor is SPOKEN as raw LaTeX.
+        sub(#"\\text\{([^}]*)\}"#, "$1")                    // \text{m/s} -> m/s
+        sub(#"\\mathrm\{([^}]*)\}"#, "$1")
+        sub(#"\\[a-zA-Z]+\{([^}]*)\}"#, "$1")               // \foo{x} -> x
+        sub(#"\\([a-zA-Z]+)"#, "$1")                        // \Delta -> Delta
+        sub(#"[\^_]\{([^}]*)\}"#, "$1")                     // ^{2} / _{i} -> 2 / i
+        sub(#"[$\\{}]"#, "")                                // strip $ \ { }
+        sub(#"\^"#, "")                                     // leftover superscript marks
         sub(#"[ \t]+"#, " ")                                // collapse spaces
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
