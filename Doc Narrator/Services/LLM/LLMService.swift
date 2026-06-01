@@ -78,8 +78,8 @@ final class LLMService: ObservableObject {
     private func streamInto(_ continuation: AsyncThrowingStream<String, Error>.Continuation,
                             system: String, user: String,
                             maxTokens: Int, temperature: Double) async throws {
-        var delay: UInt64 = 2_000_000_000
-        for attempt in 0..<5 {
+        var delay: UInt64 = 1_500_000_000
+        for attempt in 0..<4 {
             var yielded = false
             do {
                 for try await delta in stream(system: system, user: user,
@@ -88,10 +88,11 @@ final class LLMService: ObservableObject {
                     continuation.yield(delta)
                 }
                 return
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
-                let msg = String(describing: error).lowercased()
-                let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
-                guard isRateLimit, !yielded, attempt < 4 else { throw error }
+                // Retry any transient error, but only if nothing was emitted yet.
+                guard !yielded, attempt < 3 else { throw error }
                 try await Task.sleep(nanoseconds: delay); delay *= 2
             }
         }
@@ -100,20 +101,21 @@ final class LLMService: ObservableObject {
     /// `complete` with exponential backoff on the on-device model's rate limit.
     private func completeRetrying(system: String, user: String,
                                   maxTokens: Int, temperature: Double) async throws -> String {
-        var delay: UInt64 = 2_000_000_000   // 2s
-        for attempt in 0..<5 {
+        var delay: UInt64 = 1_500_000_000
+        for attempt in 0..<4 {
             do {
                 return try await complete(system: system, user: user,
                                           maxTokens: maxTokens, temperature: temperature)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
-                let msg = String(describing: error).lowercased()
-                let isRateLimit = msg.contains("rate") && (msg.contains("limit") || msg.contains("exceed"))
-                guard isRateLimit, attempt < 4 else { throw error }
+                // Retry any transient model error (rate limit, generic GenerationError -1, etc.).
+                guard attempt < 3 else { throw error }
                 try await Task.sleep(nanoseconds: delay)
                 delay *= 2
             }
         }
-        throw LLMError.unavailable("Rate limited")
+        throw LLMError.unavailable("Couldn't generate.")
     }
 
     func cancel() { provider?.cancel() }
@@ -153,20 +155,32 @@ final class LLMService: ObservableObject {
             let task = Task {
                 do {
                     if chunks.count == 1 {
-                        try await self.streamInto(continuation, system: reduceSystem, user: chunks[0],
+                        try await self.streamInto(continuation, system: reduceSystem,
+                                                  user: Self.sanitize(chunks[0]),
                                                   maxTokens: 600, temperature: 0.3)
                         continuation.finish(); return
                     }
                     // MAP: condense each chunk (all chunks — never silently drop content).
                     // Paced + retried to stay under the on-device model's rate limit.
                     var summaries: [String] = []
+                    var sawError: Error?
                     for (i, chunk) in chunks.enumerated() {
                         try Task.checkCancellation()
+                        let clean = Self.sanitize(chunk)
+                        guard clean.count > 20 else { continue }   // skip empty/near-empty chunks
                         if i > 0 { try await Task.sleep(nanoseconds: 1_000_000_000) }
-                        let part = try await self.completeRetrying(system: Self.mapSystem, user: chunk,
-                                                                   maxTokens: 200, temperature: 0.2)
-                        summaries.append(part)
+                        do {
+                            let part = try await self.completeRetrying(system: Self.mapSystem, user: clean,
+                                                                       maxTokens: 200, temperature: 0.2)
+                            summaries.append(part)
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            sawError = error   // skip this chunk; one bad chunk shouldn't kill it all
+                        }
                     }
+                    // Only fail outright if EVERY chunk failed.
+                    if summaries.isEmpty { throw sawError ?? LLMError.unavailable("Couldn't generate a summary.") }
                     // FOLD: re-summarize in groups until the combined text fits one reduce pass.
                     while Self.combinedLength(summaries) > Self.foldCharBudget && summaries.count > 1 {
                         var folded: [String] = []
@@ -209,8 +223,23 @@ final class LLMService: ObservableObject {
     // Apple's on-device model has a ~4k-token context shared by input + output. Use large
     // chunks (~7000 chars ≈ ~2300 tokens, leaving room for the capped output) so a typical
     // paper needs only a handful of calls — fewer calls = far less chance of rate limiting.
-    private static let chunkCharBudget = 8000
-    private static let foldCharBudget = 8000   // max combined map-summary chars per reduce pass
+    private static let chunkCharBudget = 5000
+    private static let foldCharBudget = 5000   // max combined map-summary chars per reduce pass
+
+    /// Clean extracted PDF text before sending to the model: drop control/format characters and
+    /// odd symbols that can make the on-device model fail, normalize, and collapse whitespace.
+    static func sanitize(_ text: String) -> String {
+        let scalars = text.unicodeScalars.map { scalar -> Character in
+            if scalar == "\n" || scalar == "\t" { return " " }
+            if scalar.value < 0x20 { return " " }                       // control chars
+            if scalar.properties.isDefaultIgnorableCodePoint { return " " }
+            return Character(scalar)
+        }
+        return String(scalars)
+            .precomposedStringWithCanonicalMapping
+            .replacingOccurrences(of: #"[ ]{2,}"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Flatten sections into text and split into context-sized chunks. Each chunk is hard-capped
     /// in size (never merges overflow into one giant chunk). ALL chunks are summarized — content
