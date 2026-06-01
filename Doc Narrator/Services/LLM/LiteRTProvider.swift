@@ -53,13 +53,39 @@ final class LiteRTManager: ObservableObject {
         progress = 0
     }
 
-    /// Lazily load (once) and return the inference engine. Loads the multi-GB model on first use.
+    /// Lazily load (once) and return the inference engine. Tries GPU then CPU and clears stale
+    /// XNNPack caches + retries on failure (mirrors the working reference; engine_create returns
+    /// NULL on a bad cache or unsupported backend). maxNumTokens 2048 = the value E2B expects.
     func engine() async throws -> LiteRTLMEngine {
         if let e = engineCache, e.isReady { return e }
-        let e = LiteRTLMEngine(modelPath: downloader.modelPath, backend: "cpu", maxNumTokens: 4096)
-        try await e.load()
-        engineCache = e
-        return e
+        let path = downloader.modelPath
+        var lastError: Error?
+        for backend in ["gpu", "cpu"] {
+            let candidate = LiteRTLMEngine(modelPath: path, backend: backend, maxNumTokens: 2048)
+            do {
+                do { try await candidate.load() }
+                catch {
+                    Self.clearXNNPackCaches(nextTo: path)
+                    try await candidate.load()
+                }
+                engineCache = candidate
+                return candidate
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? LLMError.unavailable("Couldn't load the model.")
+    }
+
+    private static func clearXNNPackCaches(nextTo modelPath: URL) {
+        let fm = FileManager.default
+        let parent = modelPath.deletingLastPathComponent()
+        let prefix = modelPath.lastPathComponent
+        guard let entries = try? fm.contentsOfDirectory(at: parent, includingPropertiesForKeys: nil) else { return }
+        for url in entries where url.lastPathComponent.hasPrefix(prefix)
+            && url.lastPathComponent.hasSuffix(".xnnpack_cache") {
+            try? fm.removeItem(at: url)
+        }
     }
 
     private func startPolling() {
@@ -86,8 +112,8 @@ final class LiteRTProvider: LLMProvider {
             let task = Task {
                 do {
                     let engine = try await LiteRTManager.shared.engine()
-                    // Gemma chat format.
-                    let prompt = "<start_of_turn>user\n\(request.system)\n\n\(request.user)<end_of_turn>\n<start_of_turn>model\n"
+                    // Gemma 4 turn format (matches the working reference).
+                    let prompt = "<|turn|>user\n\(request.system)\n\n\(request.user)<turn|>\n<|turn|>model\n"
                     for try await chunk in engine.generateStreaming(
                         prompt: prompt,
                         temperature: Float(request.temperature),
