@@ -29,6 +29,10 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
                 if wasPlaying { engine?.stop() }
                 engine = nil                 // drop reference; rebuilt lazily on next play
                 if wasPlaying { jump(to: idx) }
+            } else if isPlaying {
+                // Speed changed: discard old-rate buffer, re-prefetch at the new rate.
+                engine?.flushPrefetch()
+                prefetchWindow()
             }
         }
     }
@@ -99,8 +103,13 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
         e.delegate = self                 // claim the (possibly shared) engine while we read
         isBuffering = true
         e.speak(sentence: sentences[currentIndex], at: Self.indexBase + currentIndex, rate: settings.rate)
-        // Synthesize a window ahead so narration never pauses between sentences.
-        for offset in 1...4 {
+        prefetchWindow()
+    }
+
+    /// Synthesize a window of upcoming sentences so narration never pauses between sentences.
+    private func prefetchWindow() {
+        guard let e = engine else { return }
+        for offset in 1...6 {
             let n = currentIndex + offset
             guard n < sentences.count else { break }
             e.prefetch(sentence: sentences[n], at: Self.indexBase + n, rate: settings.rate)

@@ -39,14 +39,18 @@ struct PDFReaderView: UIViewRepresentable {
         let si = vm.currentSectionIndex
         let sj = vm.currentSentenceIndex
         let buffering = vm.isBuffering
-        let sentenceChanged = si != c.lastSI || sj != c.lastSJ || locateTrigger != c.lastTrigger
+        let positionChanged = si != c.lastSI || sj != c.lastSJ
+        let triggerChanged = locateTrigger != c.lastTrigger
         let bufferingChanged = buffering != c.lastBuffering
         c.lastBuffering = buffering
 
-        if sentenceChanged {
+        if positionChanged || triggerChanged {
             c.lastSI = si; c.lastSJ = sj; c.lastTrigger = locateTrigger
+            // Scroll ONLY when the user taps the locator. Auto-advance and tap-to-jump
+            // update the highlight in place but never move the PDF.
             c.highlightCurrentSentence(pdfView: pdfView, document: document,
-                                       sections: vm.sections, si: si, sj: sj, buffering: buffering)
+                                       sections: vm.sections, si: si, sj: sj,
+                                       buffering: buffering, scroll: triggerChanged)
         } else if bufferingChanged {
             // Same sentence, synthesis→playback transition: just swap the color.
             c.recolor(document: document, buffering: buffering)
@@ -65,8 +69,6 @@ struct PDFReaderView: UIViewRepresentable {
         var lastBuffering = false
         private let tag = "tts_hl"
         private var highlightGeneration = 0
-        // When the user double-taps a sentence, it's already on screen — don't auto-scroll/zoom.
-        private var suppressScrollOnce = false
 
         init(vm: ReaderViewModel) { self.vm = vm }
 
@@ -114,7 +116,6 @@ struct PDFReaderView: UIViewRepresentable {
                 for (si, section) in vm.sections.enumerated() {
                     for (sj, sentence) in section.sentences.enumerated()
                     where compactAlnum(sentence).contains(needle) {
-                        self.suppressScrollOnce = true
                         DispatchQueue.main.async { vm.jumpTo(sectionIndex: si, sentenceIndex: sj) }
                         return
                     }
@@ -130,7 +131,6 @@ struct PDFReaderView: UIViewRepresentable {
             for (si, section) in vm.sections.enumerated() {
                 for (sj, sentence) in section.sentences.enumerated()
                 where sentence.lowercased().contains(lower) {
-                    self.suppressScrollOnce = true
                     DispatchQueue.main.async { vm.jumpTo(sectionIndex: si, sentenceIndex: sj) }
                     return
                 }
@@ -143,7 +143,8 @@ struct PDFReaderView: UIViewRepresentable {
         // MARK: Highlight + scroll
 
         func highlightCurrentSentence(pdfView: PDFView, document: PDFDocument,
-                                       sections: [PaperSection], si: Int, sj: Int, buffering: Bool) {
+                                       sections: [PaperSection], si: Int, sj: Int,
+                                       buffering: Bool, scroll: Bool) {
             guard si < sections.count else { return }
             let section = sections[si]
             guard sj < section.sentences.count else { return }
@@ -161,7 +162,7 @@ struct PDFReaderView: UIViewRepresentable {
                 DispatchQueue.main.async {
                     guard self.highlightGeneration == gen else { return }
                     self.applyHighlight(pdfView: pdfView, document: document,
-                                        selection: selection, buffering: buffering)
+                                        selection: selection, buffering: buffering, scroll: scroll)
                 }
             }
         }
@@ -265,7 +266,7 @@ struct PDFReaderView: UIViewRepresentable {
         }
 
         private func applyHighlight(pdfView: PDFView, document: PDFDocument,
-                                    selection: PDFSelection?, buffering: Bool) {
+                                    selection: PDFSelection?, buffering: Bool, scroll: Bool) {
             for i in 0..<document.pageCount {
                 guard let page = document.page(at: i) else { continue }
                 page.annotations.filter { $0.userName == tag }.forEach { page.removeAnnotation($0) }
@@ -279,11 +280,9 @@ struct PDFReaderView: UIViewRepresentable {
                 ann.userName = tag
                 page.addAnnotation(ann)
             }
-            // Don't move the view when the user just tapped this sentence (it's already visible).
-            // For auto-advance, scroll to it but preserve the current zoom so it never jolts.
-            if suppressScrollOnce {
-                suppressScrollOnce = false
-            } else {
+            // Only move the PDF when explicitly requested (locator button). Auto-advance and
+            // tap-to-jump leave the page exactly where the user has it. Preserve zoom.
+            if scroll {
                 let scale = pdfView.scaleFactor
                 pdfView.go(to: sel)
                 pdfView.scaleFactor = scale

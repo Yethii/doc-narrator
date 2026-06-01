@@ -32,8 +32,10 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
                     || oldValue.systemVoiceIdentifier != settings.systemVoiceIdentifier {
                 reconfigureEngine()
             } else if oldValue.rate != settings.rate, state == .playing {
-                // Cancel the in-flight prefetch (synthesized at old rate) and
-                // immediately queue a new one at the updated rate.
+                // The buffered upcoming sentences were synthesized at the OLD rate. Discard
+                // them and re-synthesize at the new rate, so the change takes effect on the
+                // next sentence (the current one finishes at its rate).
+                engine.flushPrefetch()
                 prefetchNextSentence()
             }
         }
@@ -230,7 +232,7 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         guard section.type == .body || section.type == .abstract else { return }
         // Synthesize a WINDOW of upcoming sentences so playback never waits on synthesis,
         // even when the CPU is busy. The engine buffers them; topped up after each sentence.
-        let window = 4
+        let window = 6
         for offset in 1...window {
             let sj = currentSentenceIndex + offset
             guard sj < section.sentences.count else { break }

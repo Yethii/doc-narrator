@@ -139,6 +139,14 @@ final class KokoroTTSEngine: NSObject, TTSEngine {
         }
     }
 
+    /// Drop all buffered upcoming synthesis (the currently-playing sentence is not in the
+    /// buffer, so it keeps playing). Used after a speed change so the next sentences are
+    /// re-synthesized at the new rate.
+    func flushPrefetch() {
+        for (_, job) in synthJobs { job.cancel() }
+        synthJobs.removeAll()
+    }
+
     func pause()  { audioPlayer?.pause(); isSpeaking = false; isPaused = true  }
     func resume() { audioPlayer?.play();  isSpeaking = true;  isPaused = false }
 

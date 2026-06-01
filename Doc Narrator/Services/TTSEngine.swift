@@ -19,6 +19,9 @@ protocol TTSEngine: AnyObject {
     func speak(sentence: String, at index: Int, rate: Float)
     /// Begin synthesizing the next sentence in the background while the current one plays.
     func prefetch(sentence: String, at index: Int, rate: Float)
+    /// Discard the prefetched/buffered upcoming audio (e.g. after a speed change) so the
+    /// next sentences can be re-synthesized with new parameters. The current sentence keeps playing.
+    func flushPrefetch()
     func pause()
     func resume()
     func stop()
@@ -26,4 +29,5 @@ protocol TTSEngine: AnyObject {
 
 extension TTSEngine {
     func prefetch(sentence: String, at index: Int, rate: Float) {}
+    func flushPrefetch() {}
 }
