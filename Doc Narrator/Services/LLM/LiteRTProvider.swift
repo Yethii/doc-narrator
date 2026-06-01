@@ -20,6 +20,15 @@ final class LiteRTManager: ObservableObject {
     let approxSizeText = "~2.6 GB"
     let modelName = "Gemma 4 E2B (on-device)"
 
+    /// Preferred inference backend ("gpu" or "cpu"); the other is tried as fallback. Persisted.
+    @Published var preferredBackend: String = UserDefaults.standard.string(forKey: "litertBackend") ?? "gpu" {
+        didSet {
+            guard preferredBackend != oldValue else { return }
+            UserDefaults.standard.set(preferredBackend, forKey: "litertBackend")
+            engineCache = nil   // rebuild on next use with the new backend
+        }
+    }
+
     private init() { isDownloaded = downloader.isDownloaded }
 
     func startDownload() {
@@ -60,7 +69,8 @@ final class LiteRTManager: ObservableObject {
         if let e = engineCache, e.isReady { return e }
         let path = downloader.modelPath
         var lastError: Error?
-        for backend in ["gpu", "cpu"] {
+        let order = preferredBackend == "cpu" ? ["cpu", "gpu"] : ["gpu", "cpu"]
+        for backend in order {
             let candidate = LiteRTLMEngine(modelPath: path, backend: backend, maxNumTokens: 2048)
             do {
                 do { try await candidate.load() }

@@ -18,6 +18,11 @@ struct SettingsView: View {
                 Button("Delete", role: .destructive) { gemma.deleteModel() }
                     .buttonStyle(.borderless)
             }
+            Picker("Compute", selection: $gemma.preferredBackend) {
+                Text("GPU").tag("gpu")
+                Text("CPU").tag("cpu")
+            }
+            .pickerStyle(.segmented)
         } else if gemma.isDownloading {
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: gemma.progress) {
