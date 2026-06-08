@@ -136,71 +136,54 @@ private struct MessageBubble: View {
     }
 }
 
-/// Assistant answer: selectable, copyable Markdown text. A Copy and a Read-aloud button sit
-/// under the answer once it's finished. No per-sentence tap gesture — that fought text selection.
+/// Assistant answer rendered as a SINGLE selectable Text (native Markdown). One Text selects
+/// per-word reliably; stacked Texts don't. Icon-only Copy + Read aloud sit under the answer.
 private struct AssistantBubble: View {
     let message: ChatMessage
     let isStreaming: Bool
     @StateObject private var narrator = SentenceNarrator()
 
-    @State private var segments: [TextSegment] = []
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
-                    segmentView(seg)
-                }
-            }
-            .textSelection(.enabled)   // long-press to select & copy any part of the answer
+            Text(rendered)
+                .readingStyle()
+                .textSelection(.enabled)   // long-press → select & copy any word/phrase
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if !isStreaming && !message.text.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: 16) {
                     Button { UIPasteboard.general.string = Markdown.plainText(message.text) } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
+                        Image(systemName: "doc.on.doc")
                     }
+                    .accessibilityLabel("Copy")
+
                     Button { narrator.toggle() } label: {
-                        Label(narrator.isPlaying ? "Stop" : "Read aloud",
-                              systemImage: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
+                        Image(systemName: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
                     }
+                    .accessibilityLabel(narrator.isPlaying ? "Stop" : "Read aloud")
                 }
-                .font(.caption)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { rebuild() }
-        .onChange(of: message.text) { _, _ in rebuild() }
-        .onChange(of: isStreaming) { _, _ in rebuild() }
+        .onAppear { loadNarrator() }
+        .onChange(of: isStreaming) { _, _ in loadNarrator() }
         .onDisappear { narrator.stop() }
     }
 
-    private func rebuild() {
-        segments = TextSegment.parse(message.text)
-        // Load the narrator only when the answer is settled, so the spoken queue matches the
-        // final text (and playback isn't reset on every streamed token).
-        if !isStreaming { narrator.load(sentences: segments.map(\.text)) }
+    /// Render Markdown inline (bold, lists collapse to plain prose) into one AttributedString.
+    private var rendered: AttributedString {
+        let opts = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let a = try? AttributedString(markdown: message.text, options: opts) { return a }
+        return AttributedString(message.text)
     }
 
-    @ViewBuilder
-    private func segmentView(_ seg: TextSegment) -> some View {
-        Group {
-            switch seg.kind {
-            case .heading:
-                Text(seg.text).font(.title3.weight(.semibold))
-            case .bullet:
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("•").foregroundStyle(.secondary)
-                    Text(seg.text)
-                }
-                .readingStyle()
-            case .body:
-                Text(seg.text).readingStyle()
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
+    private func loadNarrator() {
+        guard !isStreaming else { return }
+        narrator.load(sentences: Markdown.sentences(message.text))
     }
 }
 

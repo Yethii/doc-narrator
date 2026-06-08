@@ -271,8 +271,17 @@ final class LLMService: ObservableObject {
     }
 
     private static func chatUserPrompt(context: String, history: String, question: String) -> String {
-        var p = "Document excerpts:\n\(context)\n\n"
+        // Fence the document and restate the grounding rule IN the prompt body, right next to the
+        // question. Apple's on-device model in particular drifts to general knowledge when the
+        // rule lives only in `instructions`; repeating it here, with clear delimiters, keeps both
+        // Apple and Gemma anchored to the supplied text.
+        var p = "Here are excerpts from the document. Use ONLY this text to answer.\n\n"
+        p += "<<<DOCUMENT\n\(context)\nDOCUMENT>>>\n\n"
         if !history.isEmpty { p += "Conversation so far:\n\(history)\n\n" }
+        p += "Answer the user's question using ONLY the document above. "
+        p += "If the answer is not in the document, reply exactly: "
+        p += "\"I couldn't find that in this document.\" "
+        p += "Do not use outside knowledge. Keep the answer focused on what was asked.\n\n"
         p += "Question: \(question)"
         return p
     }
