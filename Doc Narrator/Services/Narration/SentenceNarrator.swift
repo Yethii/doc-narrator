@@ -51,6 +51,12 @@ final class SentenceNarrator: NSObject, ObservableObject, TTSEngineDelegate {
         self.sentences = sentences
     }
 
+    /// Replace the queue from Markdown, honoring the user's narration settings (skip tables/
+    /// equations/code; read tables row-wise). Single source of truth for AI-text speech.
+    func load(markdown: String) {
+        load(sentences: MarkdownDocument.narrationSentences(markdown, settings: NarrationSettings.load()))
+    }
+
     func toggle() { isPlaying ? pause() : play() }
 
     func play() {

@@ -93,9 +93,10 @@ enum DocumentImporter {
         ])
     }
 
-    /// Convert Markdown to a styled attributed string: ATX headings become bold/larger, `**bold**`
-    /// becomes bold, list markers become real bullets, and Markdown punctuation/escapes are
-    /// stripped. Inline emphasis is handled per line so the result reads cleanly.
+    /// Convert Markdown to a styled attributed string using the SHARED MarkdownDocument parser
+    /// (same one the on-screen renderer + narrator use): headings become bold/larger, `**bold**`
+    /// becomes bold, lists become real bullets/numbers, tables become aligned text, and Markdown
+    /// punctuation/escapes/LaTeX are resolved so nothing raw shows or is later read aloud.
     private static func markdownAttributedString(_ markdown: String) -> NSAttributedString {
         let out = NSMutableAttributedString()
         let bodyPara = NSMutableParagraphStyle()
@@ -103,34 +104,49 @@ enum DocumentImporter {
         let headingPara = NSMutableParagraphStyle()
         headingPara.lineSpacing = 4; headingPara.paragraphSpacing = 6; headingPara.paragraphSpacingBefore = 12
 
-        for rawLine in markdown.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty { out.append(NSAttributedString(string: "\n")); continue }
-
-            // Headings: # .. ######
-            if let m = line.range(of: #"^(#{1,6})\s+"#, options: .regularExpression) {
-                let depth = min(max(line.prefix(while: { $0 == "#" }).count, 1), 6)
-                let text = stripInlineMarkdown(String(line[m.upperBound...]))
-                let size: CGFloat = depth <= 1 ? 20 : depth == 2 ? 18 : 16
+        for block in MarkdownDocument.parse(markdown) {
+            switch block {
+            case .heading(let level, let text):
+                let size: CGFloat = level <= 1 ? 20 : level == 2 ? 18 : 16
                 out.append(NSAttributedString(string: text + "\n", attributes: [
                     .font: UIFont.systemFont(ofSize: size, weight: .bold),
-                    .foregroundColor: UIColor.black,
-                    .paragraphStyle: headingPara
-                ]))
-                continue
+                    .foregroundColor: UIColor.black, .paragraphStyle: headingPara]))
+            case .paragraph(let text):
+                out.append(styledInline(stripInlineMarkdown(text) + "\n", base: bodyPara))
+            case .bullet(let text):
+                out.append(styledInline("•  " + stripInlineMarkdown(text) + "\n", base: bodyPara))
+            case .numbered(let index, let text):
+                out.append(styledInline("\(index).  " + stripInlineMarkdown(text) + "\n", base: bodyPara))
+            case .code(let code):
+                out.append(NSAttributedString(string: code + "\n", attributes: [
+                    .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                    .foregroundColor: UIColor.darkGray, .paragraphStyle: bodyPara]))
+            case .table(let header, let rows):
+                out.append(tableAttributedString(header: header, rows: rows, base: bodyPara))
             }
-
-            // List items: -, *, +, or "1." → bullet
-            if line.range(of: #"^([-*+]|\d+[.)])\s+"#, options: .regularExpression) != nil {
-                let text = stripInlineMarkdown(line.replacingOccurrences(
-                    of: #"^([-*+]|\d+[.)])\s+"#, with: "", options: .regularExpression))
-                out.append(styledInline("•  " + text + "\n", base: bodyPara))
-                continue
-            }
-
-            out.append(styledInline(stripInlineMarkdown(line) + "\n", base: bodyPara))
         }
         return out
+    }
+
+    /// Render a Markdown table as monospaced, column-aligned text in the PDF.
+    private static func tableAttributedString(header: [String], rows: [[String]],
+                                              base: NSParagraphStyle) -> NSAttributedString {
+        let cols = max(header.count, rows.map(\.count).max() ?? 0)
+        var widths = [Int](repeating: 0, count: cols)
+        func cell(_ r: [String], _ c: Int) -> String { c < r.count ? r[c] : "" }
+        for c in 0..<cols {
+            widths[c] = max(cell(header, c).count, rows.map { cell($0, c).count }.max() ?? 0)
+        }
+        func rowLine(_ r: [String]) -> String {
+            (0..<cols).map { cell(r, $0).padding(toLength: widths[$0], withPad: " ", startingAt: 0) }
+                .joined(separator: "  |  ")
+        }
+        var lines = [rowLine(header)]
+        lines.append((0..<cols).map { String(repeating: "-", count: widths[$0]) }.joined(separator: "--+--"))
+        lines.append(contentsOf: rows.map(rowLine))
+        return NSAttributedString(string: lines.joined(separator: "\n") + "\n", attributes: [
+            .font: UIFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: UIColor.black, .paragraphStyle: base])
     }
 
     /// Build an attributed line, rendering **bold** / __bold__ spans as bold; everything else

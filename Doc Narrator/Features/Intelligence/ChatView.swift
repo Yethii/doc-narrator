@@ -145,10 +145,7 @@ private struct AssistantBubble: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(rendered)
-                .readingStyle()
-                .textSelection(.enabled)   // long-press → select & copy any word/phrase
-                .frame(maxWidth: .infinity, alignment: .leading)
+            RichMarkdownView(markdown: message.text)   // selectable; headings/bold/lists/tables
 
             if !isStreaming && !message.text.isEmpty {
                 HStack(spacing: 16) {
@@ -173,17 +170,9 @@ private struct AssistantBubble: View {
         .onDisappear { narrator.stop() }
     }
 
-    /// Render Markdown inline (bold, lists collapse to plain prose) into one AttributedString.
-    private var rendered: AttributedString {
-        let opts = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        if let a = try? AttributedString(markdown: message.text, options: opts) { return a }
-        return AttributedString(message.text)
-    }
-
     private func loadNarrator() {
         guard !isStreaming else { return }
-        narrator.load(sentences: Markdown.sentences(message.text))
+        narrator.load(markdown: message.text)
     }
 }
 
