@@ -15,7 +15,11 @@ final class LibraryStore: ObservableObject {
 
     private init() { load() }
 
-    func add(paper: Paper) { papers.append(paper); save() }
+    func add(paper: Paper) {
+        papers.append(paper)
+        papers.sort { $0.dateAdded > $1.dateAdded }   // most recent first
+        save()
+    }
 
     /// Add a PDF we generated locally (from pasted text or a web page). We own the file, so it's
     /// a local copy that gets deleted when the paper is removed.
@@ -142,7 +146,7 @@ final class LibraryStore: ObservableObject {
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: key),
               let decoded = try? JSONDecoder().decode([Paper].self, from: data) else { return }
-        papers = decoded
+        papers = decoded.sorted { $0.dateAdded > $1.dateAdded }   // most recent first
     }
 
     private func save() {
