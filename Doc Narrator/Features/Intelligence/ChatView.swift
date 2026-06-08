@@ -10,11 +10,13 @@ struct ChatView: View {
 
     @ObservedObject private var llm = LLMService.shared
     @StateObject private var model: ChatModel
+    @FocusState private var composerFocused: Bool
 
     init(paper: Paper, sections: [PaperSection], session: ChatSession) {
         self.paper = paper
         self.sections = sections
-        _model = StateObject(wrappedValue: ChatModel(session: session, sections: sections))
+        _model = StateObject(wrappedValue: ChatModel(session: session, sections: sections,
+                                                     paperTitle: paper.title))
     }
 
     var body: some View {
@@ -84,6 +86,7 @@ struct ChatView: View {
             TextField("Ask about this paper…", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
+                .focused($composerFocused)
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground)))
 
@@ -93,7 +96,7 @@ struct ChatView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Button { model.send() } label: {
+                Button { composerFocused = false; model.send() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 32))
                         .foregroundStyle(canSend ? .blue : .secondary)
                 }
@@ -125,22 +128,77 @@ private struct MessageBubble: View {
                     .background(RoundedRectangle(cornerRadius: 16).fill(Color.blue.opacity(0.15)))
             }
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                NarratableTextView(markdown: message.text, narrator: narrator, isStreaming: isStreaming)
-                    .frame(maxHeight: 10_000)   // let it size to content inside the outer scroll
-                    .fixedSize(horizontal: false, vertical: true)
-                if !isStreaming && !message.text.isEmpty {
-                    Button { narrator.toggle() } label: {
-                        Label(narrator.isPlaying ? "Stop" : "Read aloud",
-                              systemImage: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+            AssistantBubble(message: message, isStreaming: isStreaming, narrator: narrator)
+        }
+    }
+}
+
+/// Assistant answer rendered inline (no nested ScrollView — that broke layout and read-aloud).
+/// Sentences map 1:1 to the narrator queue: current sentence highlights, tap to jump.
+private struct AssistantBubble: View {
+    let message: ChatMessage
+    let isStreaming: Bool
+    @ObservedObject var narrator: SentenceNarrator
+
+    @State private var segments: [TextSegment] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
+                    segmentView(seg, index: i)
+                        .contentShape(Rectangle())
+                        .onTapGesture { narrator.jump(to: i) }
                 }
             }
-            .onDisappear { narrator.stop() }
+
+            if !isStreaming && !message.text.isEmpty {
+                Button { narrator.toggle() } label: {
+                    Label(narrator.isPlaying ? "Stop" : "Read aloud",
+                          systemImage: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { rebuild() }
+        .onChange(of: message.text) { _, _ in rebuild() }
+        .onChange(of: isStreaming) { _, _ in rebuild() }
+        .onDisappear { narrator.stop() }
+    }
+
+    private func rebuild() {
+        segments = TextSegment.parse(message.text)
+        // Load the narrator only when the answer is settled, so the spoken queue matches the
+        // final text (and playback isn't reset on every streamed token).
+        if !isStreaming { narrator.load(sentences: segments.map(\.text)) }
+    }
+
+    @ViewBuilder
+    private func segmentView(_ seg: TextSegment, index: Int) -> some View {
+        let isCurrent = index == narrator.currentIndex
+        Group {
+            switch seg.kind {
+            case .heading:
+                Text(seg.text).font(.title3.weight(.semibold))
+            case .bullet:
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("•").foregroundStyle(.secondary)
+                    Text(seg.text)
+                }
+                .readingStyle()
+            case .body:
+                Text(seg.text).readingStyle()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isCurrent ? Color.yellow.opacity(0.28) : .clear)
+        )
     }
 }
 
@@ -155,12 +213,14 @@ final class ChatModel: ObservableObject {
     @Published private(set) var error: String?
 
     private let sections: [PaperSection]
+    private let paperTitle: String
     private var task: Task<Void, Never>?
 
-    init(session: ChatSession, sections: [PaperSection]) {
+    init(session: ChatSession, sections: [PaperSection], paperTitle: String) {
         self.session = session
         self.messages = session.messages
         self.sections = sections
+        self.paperTitle = paperTitle
     }
 
     func send() {
@@ -187,7 +247,8 @@ final class ChatModel: ObservableObject {
             guard let self else { return }
             do {
                 for try await delta in LLMService.shared.chat(question: text, history: history,
-                                                              sections: self.sections) {
+                                                              sections: self.sections,
+                                                              paperTitle: self.paperTitle) {
                     if Task.isCancelled { break }
                     self.appendDelta(delta, to: assistant.id)
                 }

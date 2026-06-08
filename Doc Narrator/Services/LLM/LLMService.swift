@@ -148,12 +148,13 @@ final class LLMService: ObservableObject {
     /// model's context by sending only top-k sections and the last few turns.
     func chat(question: String,
               history: [ChatMessage],
-              sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
+              sections: [PaperSection],
+              paperTitle: String = "") -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             guard provider != nil else {
                 continuation.finish(throwing: LLMError.unavailable(statusText)); return
             }
-            let context = Self.chatContext(question: question, sections: sections)
+            let context = Self.chatContext(question: question, sections: sections, paperTitle: paperTitle)
             let convo = Self.recentHistory(history)
             let user = Self.chatUserPrompt(context: context, history: convo, question: question)
             let task = Task {
@@ -179,20 +180,64 @@ final class LLMService: ObservableObject {
         "citations, numbers, or facts not present in the excerpts."
 
     /// Build the grounding context: top-k relevant sections, capped to a char budget.
-    private static func chatContext(question: String, sections: [PaperSection]) -> String {
-        let picked = Retriever.topSections(for: question, in: sections, k: 6)
-        let source = picked.isEmpty ? sections : picked
+    /// Metadata questions (title / authors / abstract) don't retrieve well by embedding
+    /// similarity — the word "title" isn't semantically close to the actual title text — so we
+    /// detect that intent cheaply and pull the document's front matter ON DEMAND instead of
+    /// always spending context on it.
+    private static func chatContext(question: String, sections: [PaperSection],
+                                    paperTitle: String) -> String {
         var blocks: [String] = []
         var used = 0
+        func add(_ text: String, heading: String? = nil) -> Bool {
+            let body = sanitize(text)
+            guard !body.isEmpty else { return true }
+            let block = heading.map { "## \($0)\n\(body)" } ?? body
+            if used + block.count > chatContextBudget { return false }
+            blocks.append(block); used += block.count
+            return true
+        }
+
+        // On-demand front matter for metadata questions only. The title isn't stored as a
+        // section (TextCleaner only emits abstract/header/body), so it comes from Paper.title.
+        if isMetadataQuestion(question) {
+            if !paperTitle.isEmpty { _ = add(paperTitle, heading: "Title") }
+            for s in frontMatter(sections) {
+                let heading = s.heading ?? defaultHeading(for: s.type)
+                _ = add(s.sentences.joined(separator: " "), heading: heading)
+            }
+        }
+
+        // Then the semantically retrieved sections, until the budget is full.
+        let picked = Retriever.topSections(for: question, in: sections, k: 6)
+        let source = picked.isEmpty ? sections : picked
         for s in source {
             let body = s.sentences.joined(separator: " ")
             guard !body.isEmpty else { continue }
-            let block = s.heading.map { "## \($0)\n\(body)" } ?? body
-            let clean = sanitize(block)
-            if used + clean.count > chatContextBudget { break }
-            blocks.append(clean); used += clean.count
+            if !add(body, heading: s.heading) { break }
         }
         return blocks.joined(separator: "\n\n")
+    }
+
+    /// Cheap keyword intent check for "what's the title/author/abstract?"-style questions.
+    private static func isMetadataQuestion(_ q: String) -> Bool {
+        let lower = q.lowercased()
+        let keys = ["title", "titled", "called", "name of",
+                    "author", "authors", "who wrote", "written by", "by whom",
+                    "abstract", "what is this paper", "what's this paper", "what is this document"]
+        return keys.contains { lower.contains($0) }
+    }
+
+    /// Title + abstract sections (the document's front matter), if present.
+    private static func frontMatter(_ sections: [PaperSection]) -> [PaperSection] {
+        sections.filter { $0.type == .title || $0.type == .abstract }
+    }
+
+    private static func defaultHeading(for type: SectionType) -> String? {
+        switch type {
+        case .title:    return "Title"
+        case .abstract: return "Abstract"
+        default:        return nil
+        }
     }
 
     /// Keep the last few turns so the model has conversational context without overrunning.
