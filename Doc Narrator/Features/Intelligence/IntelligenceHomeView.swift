@@ -11,6 +11,7 @@ struct IntelligenceHomeView: View {
     @State private var askTopic = false
     @State private var topicText = ""
     @State private var activeJob: SummaryGenerator.Job?   // drives navigation to a live job
+    @State private var activeChat: ChatSession?            // drives navigation to a new chat
 
     private var liveJobs: [SummaryGenerator.Job] { generator.jobs(for: vm.paper.id) }
 
@@ -57,8 +58,19 @@ struct IntelligenceHomeView: View {
             }
 
             Section("Chat") {
-                Label("Chat with PDF — coming soon", systemImage: "bubble.left.and.bubble.right")
-                    .foregroundStyle(.secondary)
+                ForEach(sessions.chats) { chat in
+                    NavigationLink {
+                        ChatView(paper: vm.paper, sections: vm.sections, session: chat)
+                    } label: {
+                        chatRow(chat)
+                    }
+                }
+                .onDelete(perform: deleteChats)
+
+                Button { newChat() } label: {
+                    Label("New chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                .disabled(!llm.isReady)
             }
 
             Section {
@@ -83,6 +95,9 @@ struct IntelligenceHomeView: View {
         }
         .navigationDestination(item: $activeJob) { job in
             SummaryArtifactView(paper: vm.paper, sections: vm.sections, job: job)
+        }
+        .navigationDestination(item: $activeChat) { chat in
+            ChatView(paper: vm.paper, sections: vm.sections, session: chat)
         }
     }
 
@@ -115,6 +130,26 @@ struct IntelligenceHomeView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    private func chatRow(_ c: ChatSession) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(c.title).font(.headline).lineLimit(1)
+            Text("\(c.messages.count) message\(c.messages.count == 1 ? "" : "s") · \(c.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func newChat() {
+        let chat = ChatSession(paperID: vm.paper.id, modelLabel: llm.currentModelLabel)
+        SessionStore.upsertChat(chat)
+        activeChat = chat
+    }
+
+    private func deleteChats(_ offsets: IndexSet) {
+        for i in offsets { SessionStore.deleteChat(id: sessions.chats[i].id, paperID: vm.paper.id) }
+        reload()
     }
 
     private func reload() {

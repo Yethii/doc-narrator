@@ -141,6 +141,79 @@ final class LLMService: ObservableObject {
         return summarizeCore(sections: source, reduceSystem: reduce)
     }
 
+    // MARK: - Chat with PDF (retrieval-grounded Q&A)
+
+    /// Answer a question about the document, grounded in the most relevant sections (retrieval)
+    /// plus the recent conversation. Streams the answer. Keeps the prompt within the on-device
+    /// model's context by sending only top-k sections and the last few turns.
+    func chat(question: String,
+              history: [ChatMessage],
+              sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            guard provider != nil else {
+                continuation.finish(throwing: LLMError.unavailable(statusText)); return
+            }
+            let context = Self.chatContext(question: question, sections: sections)
+            let convo = Self.recentHistory(history)
+            let user = Self.chatUserPrompt(context: context, history: convo, question: question)
+            let task = Task {
+                do {
+                    try await self.streamInto(continuation, system: Self.chatSystem,
+                                              user: user, maxTokens: 700, temperature: 0.3)
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: LLMError.cancelled)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static let chatSystem =
+        "You are a helpful assistant answering questions about a specific document. " +
+        "Answer ONLY from the provided excerpts and the conversation; if the excerpts don't " +
+        "contain the answer, say so plainly rather than guessing. Be concise and accurate, " +
+        "use Markdown when it helps (short bullets, bold for key terms), and never invent " +
+        "citations, numbers, or facts not present in the excerpts."
+
+    /// Build the grounding context: top-k relevant sections, capped to a char budget.
+    private static func chatContext(question: String, sections: [PaperSection]) -> String {
+        let picked = Retriever.topSections(for: question, in: sections, k: 6)
+        let source = picked.isEmpty ? sections : picked
+        var blocks: [String] = []
+        var used = 0
+        for s in source {
+            let body = s.sentences.joined(separator: " ")
+            guard !body.isEmpty else { continue }
+            let block = s.heading.map { "## \($0)\n\(body)" } ?? body
+            let clean = sanitize(block)
+            if used + clean.count > chatContextBudget { break }
+            blocks.append(clean); used += clean.count
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+
+    /// Keep the last few turns so the model has conversational context without overrunning.
+    private static func recentHistory(_ history: [ChatMessage]) -> String {
+        let recent = history.suffix(6)
+        guard !recent.isEmpty else { return "" }
+        return recent.map { m in
+            let who = m.role == .user ? "User" : "Assistant"
+            return "\(who): \(sanitize(m.text))"
+        }.joined(separator: "\n")
+    }
+
+    private static func chatUserPrompt(context: String, history: String, question: String) -> String {
+        var p = "Document excerpts:\n\(context)\n\n"
+        if !history.isEmpty { p += "Conversation so far:\n\(history)\n\n" }
+        p += "Question: \(question)"
+        return p
+    }
+
+    private static let chatContextBudget = 6000
+
     /// Shared map-reduce engine so long inputs fit the model's context window.
     private func summarizeCore(sections: [PaperSection],
                                reduceSystem: String) -> AsyncThrowingStream<String, Error> {
