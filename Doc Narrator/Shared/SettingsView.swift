@@ -71,6 +71,11 @@ struct SettingsView: View {
                                 Text(mode.rawValue).tag(mode)
                             }
                         }
+                        NavigationLink {
+                            PromptSettingsView()
+                        } label: {
+                            Label("AI Prompts", systemImage: "text.quote")
+                        }
                     }
                 } header: {
                     Text("Intelligence")

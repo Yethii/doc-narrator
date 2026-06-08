@@ -18,6 +18,29 @@ final class LLMService: ObservableObject {
         }
     }
 
+    /// User-editable system prompts (Settings → AI Prompts). Live so edits take effect at once.
+    @Published var prompts: PromptSettings {
+        didSet { if prompts != oldValue { prompts.save() } }
+    }
+
+    /// Character budget for the chat/summary context window, sized to the active model.
+    /// Apple's on-device model has a ~4k-TOKEN total (input + output) — much smaller than it
+    /// sounds — so it gets a tighter budget than Gemma to avoid context overflow (which makes
+    /// Apple confabulate "I can't read the paper"). Same rolling-window mechanism for both;
+    /// only the size differs.
+    var contextCharBudget: Int {
+        switch settings.providerType {
+        case .appleFoundation: return 2400   // ~700–800 tokens of excerpts, leaves room in 4k
+        case .mlxLocal:        return 6000   // Gemma E2B has more headroom
+        case .off:             return 6000
+        }
+    }
+
+    /// Output-token reservation, also sized to the active model's budget.
+    var chatMaxOutputTokens: Int {
+        settings.providerType == .appleFoundation ? 450 : 700
+    }
+
     /// True when an intelligence feature can run right now.
     var isReady: Bool { if case .available = status { return true }; return false }
 
@@ -33,6 +56,7 @@ final class LLMService: ObservableObject {
 
     private init() {
         self.settings = LLMSettings.load()
+        self.prompts = PromptSettings.load()
         reconfigure()
     }
 
@@ -124,7 +148,7 @@ final class LLMService: ObservableObject {
 
     /// General reader-facing summary of the whole paper.
     func summarize(sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
-        summarizeCore(sections: sections, reduceSystem: Self.reduceSystem)
+        summarizeCore(sections: sections, reduceSystem: prompts.generalSummary)
     }
 
     /// Summary focused on a topic: retrieve the most relevant sections, then summarize those
@@ -132,13 +156,8 @@ final class LLMService: ObservableObject {
     func focusedSummary(topic: String, sections: [PaperSection]) -> AsyncThrowingStream<String, Error> {
         let picked = Retriever.topSections(for: topic, in: sections, k: 6)
         let source = picked.isEmpty ? sections : picked
-        let reduce =
-            "Summarize what the document says about a specific topic: \"\(topic)\". " +
-            "Begin with a 2–4 sentence plain-language overview focused on that topic (no heading " +
-            "or label), then a blank line and a line **Key points** with 3–6 concise bullets. " +
-            "If the document barely covers the topic, say so plainly. Be faithful to the source; " +
-            "do not invent details and do not add a 'TL;DR' label."
-        return summarizeCore(sections: source, reduceSystem: reduce)
+        return summarizeCore(sections: source,
+                             reduceSystem: prompts.resolvedCustomSummary(topic: topic))
     }
 
     // MARK: - Chat with PDF (retrieval-grounded Q&A)
@@ -154,13 +173,17 @@ final class LLMService: ObservableObject {
             guard provider != nil else {
                 continuation.finish(throwing: LLMError.unavailable(statusText)); return
             }
-            let context = Self.chatContext(question: question, sections: sections, paperTitle: paperTitle)
+            let budget = contextCharBudget
+            let context = Self.chatContext(question: question, sections: sections,
+                                           paperTitle: paperTitle, budget: budget)
             let convo = Self.recentHistory(history)
             let user = Self.chatUserPrompt(context: context, history: convo, question: question)
+            let chatSystem = prompts.chat
+            let maxOut = chatMaxOutputTokens
             let task = Task {
                 do {
-                    try await self.streamInto(continuation, system: Self.chatSystem,
-                                              user: user, maxTokens: 700, temperature: 0.3)
+                    try await self.streamInto(continuation, system: chatSystem,
+                                              user: user, maxTokens: maxOut, temperature: 0.3)
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish(throwing: LLMError.cancelled)
@@ -172,27 +195,24 @@ final class LLMService: ObservableObject {
         }
     }
 
-    private static let chatSystem =
-        "You are a helpful assistant answering questions about a specific document. " +
-        "Answer ONLY from the provided excerpts and the conversation; if the excerpts don't " +
-        "contain the answer, say so plainly rather than guessing. Be concise and accurate, " +
-        "use Markdown when it helps (short bullets, bold for key terms), and never invent " +
-        "citations, numbers, or facts not present in the excerpts."
-
-    /// Build the grounding context: top-k relevant sections, capped to a char budget.
-    /// Metadata questions (title / authors / abstract) don't retrieve well by embedding
-    /// similarity — the word "title" isn't semantically close to the actual title text — so we
-    /// detect that intent cheaply and pull the document's front matter ON DEMAND instead of
-    /// always spending context on it.
+    /// Build the grounding context: top-k relevant sections, capped to a char budget sized to
+    /// the active model (see `contextCharBudget`). Metadata questions (title / authors /
+    /// abstract) don't retrieve well by embedding similarity — the word "title" isn't
+    /// semantically close to the actual title text — so we detect that intent cheaply and pull
+    /// the document's front matter ON DEMAND instead of always spending context on it.
+    ///
+    /// Retrieves more sections (k=8) than it can fit, then fills the budget best-first. The
+    /// extra headroom reduces RAG brittleness: a one-word change in the question shifts the
+    /// embedding less destructively when there's slack to absorb a reordering.
     private static func chatContext(question: String, sections: [PaperSection],
-                                    paperTitle: String) -> String {
+                                    paperTitle: String, budget: Int) -> String {
         var blocks: [String] = []
         var used = 0
         func add(_ text: String, heading: String? = nil) -> Bool {
             let body = sanitize(text)
             guard !body.isEmpty else { return true }
             let block = heading.map { "## \($0)\n\(body)" } ?? body
-            if used + block.count > chatContextBudget { return false }
+            if used + block.count > budget { return false }
             blocks.append(block); used += block.count
             return true
         }
@@ -208,7 +228,7 @@ final class LLMService: ObservableObject {
         }
 
         // Then the semantically retrieved sections, until the budget is full.
-        let picked = Retriever.topSections(for: question, in: sections, k: 6)
+        let picked = Retriever.topSections(for: question, in: sections, k: 8)
         let source = picked.isEmpty ? sections : picked
         for s in source {
             let body = s.sentences.joined(separator: " ")
@@ -257,8 +277,6 @@ final class LLMService: ObservableObject {
         return p
     }
 
-    private static let chatContextBudget = 6000
-
     /// Shared map-reduce engine so long inputs fit the model's context window.
     private func summarizeCore(sections: [PaperSection],
                                reduceSystem: String) -> AsyncThrowingStream<String, Error> {
@@ -266,6 +284,8 @@ final class LLMService: ObservableObject {
             guard provider != nil else {
                 continuation.finish(throwing: LLMError.unavailable(statusText)); return
             }
+            let mapSystem = prompts.map
+            let foldSystem = prompts.fold
             let chunks = Self.buildChunks(from: sections)
             guard !chunks.isEmpty else {
                 continuation.finish(throwing: LLMError.unavailable("No readable text in this document.")); return
@@ -288,7 +308,7 @@ final class LLMService: ObservableObject {
                         guard clean.count > 20 else { continue }   // skip empty/near-empty chunks
                         if i > 0 { try await Task.sleep(nanoseconds: 1_000_000_000) }
                         do {
-                            let part = try await self.completeRetrying(system: Self.mapSystem, user: clean,
+                            let part = try await self.completeRetrying(system: mapSystem, user: clean,
                                                                        maxTokens: 200, temperature: 0.2)
                             summaries.append(part)
                         } catch is CancellationError {
@@ -305,7 +325,7 @@ final class LLMService: ObservableObject {
                         for group in Self.group(summaries, maxChars: Self.foldCharBudget) {
                             try Task.checkCancellation()
                             try await Task.sleep(nanoseconds: 1_000_000_000)
-                            folded.append(try await self.completeRetrying(system: Self.mapSystem, user: group,
+                            folded.append(try await self.completeRetrying(system: foldSystem, user: group,
                                                                           maxTokens: 200, temperature: 0.2))
                         }
                         summaries = folded
@@ -325,18 +345,6 @@ final class LLMService: ObservableObject {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
-
-    private static let mapSystem =
-        "You are summarizing one part of a longer academic or technical document. " +
-        "Write a concise, factual summary (3–5 sentences) of the key points in this part. " +
-        "Only use information present in the text; do not speculate or add outside facts."
-
-    private static let reduceSystem =
-        "You are writing a clear, reader-friendly summary of a document. Begin with a 2–4 " +
-        "sentence plain-language overview (no heading or label). Then a blank line and a line " +
-        "**Key points** followed by 4–7 concise bullets of the most important takeaways. " +
-        "Be accurate and faithful to the source; do not invent details and do not add a " +
-        "'TL;DR' label."
 
     // Apple's on-device model has a ~4k-token context shared by input + output. Use large
     // chunks (~7000 chars ≈ ~2300 tokens, leaving room for the capped output) so a typical

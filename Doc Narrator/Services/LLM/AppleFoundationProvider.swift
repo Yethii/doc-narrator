@@ -56,6 +56,8 @@ final class AppleFoundationProvider: LLMProvider {
                         continuation.finish()
                     } catch is CancellationError {
                         continuation.finish(throwing: LLMError.cancelled)
+                    } catch let genErr as LanguageModelSession.GenerationError {
+                        continuation.finish(throwing: Self.mapGenerationError(genErr))
                     } catch {
                         continuation.finish(throwing: error)
                     }
@@ -74,6 +76,22 @@ final class AppleFoundationProvider: LLMProvider {
     func cancel() { task?.cancel(); task = nil }
 
     #if canImport(FoundationModels)
+    /// Turn Apple's opaque generation errors into clear, honest messages. The big one is
+    /// context overflow: Apple's on-device model has only a ~4k-token total budget (input +
+    /// output), so a long grounded prompt overflows — and instead of a clean failure the model
+    /// would otherwise confabulate "I can't read the paper". Surface the real reason.
+    @available(iOS 26.0, *)
+    private static func mapGenerationError(_ error: LanguageModelSession.GenerationError) -> LLMError {
+        switch error {
+        case .exceededContextWindowSize:
+            return .unavailable("This is too much text for Apple Intelligence's small context window. Ask a shorter or more specific question, or switch to Gemma (on-device) in Settings.")
+        case .guardrailViolation:
+            return .unavailable("Apple Intelligence declined to answer this (content safety). Try rephrasing, or switch to Gemma in Settings.")
+        default:
+            return .unavailable("Apple Intelligence couldn't complete this. Try again, a shorter question, or Gemma in Settings.")
+        }
+    }
+
     @available(iOS 26.0, *)
     private static func describe(_ reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
         switch reason {
