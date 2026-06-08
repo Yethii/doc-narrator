@@ -77,6 +77,12 @@ struct SettingsView: View {
                             Label("AI Prompts", systemImage: "text.quote")
                         }
                     }
+                    if llm.settings.providerType == .appleFoundation {
+                        Label("Apple Intelligence works well for summaries but can be unreliable in Chat with PDF — it sometimes ignores the document. For chat, Gemma (on-device) is more accurate.",
+                              systemImage: "exclamationmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("Intelligence")
                 } footer: {

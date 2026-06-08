@@ -25,6 +25,19 @@ struct IntelligenceHomeView: View {
             }
 
             Section("Summaries") {
+                // Actions first, so they're always reachable no matter how many saved items.
+                Button {
+                    activeJob = generator.startGeneral(paper: vm.paper, sections: vm.sections)
+                } label: {
+                    Label("New general summary", systemImage: "sparkles")
+                }
+                .disabled(!llm.isReady)
+
+                Button { topicText = ""; askTopic = true } label: {
+                    Label("Summarize a topic…", systemImage: "text.magnifyingglass")
+                }
+                .disabled(!llm.isReady)
+
                 // In-flight (and failed) generations — keep running / visible even if you leave.
                 ForEach(liveJobs) { job in
                     NavigationLink {
@@ -43,21 +56,14 @@ struct IntelligenceHomeView: View {
                     }
                 }
                 .onDelete(perform: deleteSummaries)
-
-                Button {
-                    activeJob = generator.startGeneral(paper: vm.paper, sections: vm.sections)
-                } label: {
-                    Label("New general summary", systemImage: "sparkles")
-                }
-                .disabled(!llm.isReady)
-
-                Button { topicText = ""; askTopic = true } label: {
-                    Label("Summarize a topic…", systemImage: "text.magnifyingglass")
-                }
-                .disabled(!llm.isReady)
             }
 
             Section("Chat") {
+                Button { newChat() } label: {
+                    Label("New chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                .disabled(!llm.isReady)
+
                 ForEach(sessions.chats) { chat in
                     NavigationLink {
                         ChatView(paper: vm.paper, sections: vm.sections, session: chat)
@@ -66,11 +72,6 @@ struct IntelligenceHomeView: View {
                     }
                 }
                 .onDelete(perform: deleteChats)
-
-                Button { newChat() } label: {
-                    Label("New chat", systemImage: "bubble.left.and.bubble.right")
-                }
-                .disabled(!llm.isReady)
             }
 
             Section {

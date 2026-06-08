@@ -58,7 +58,10 @@ final class LibraryStore: ObservableObject {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
 
-        guard let pdfDoc = PDFDocument(url: url) else { return }
+        // Non-PDF (text/markdown/rtf) opened from another app → convert to PDF first.
+        guard let pdfDoc = PDFDocument(url: url) else {
+            importTextFile(url); return
+        }
 
         let isInbox = url.path.contains("/Inbox/")
         let isInAppDocs = url.path.hasPrefix(docsURL.path)
@@ -135,6 +138,28 @@ final class LibraryStore: ObservableObject {
                 try? FileManager.default.removeItem(at: url)
             }
         } catch {}
+    }
+
+    /// Convert a plain-text / Markdown / RTF file (opened from another app) into a PDF so it
+    /// flows through the same pipeline. Word/EPUB aren't supported — they need a real parser.
+    private func importTextFile(_ url: URL) {
+        let text: String
+        if url.pathExtension.lowercased() == "rtf",
+           let attr = try? NSAttributedString(url: url,
+                                              options: [.documentType: NSAttributedString.DocumentType.rtf],
+                                              documentAttributes: nil) {
+            text = attr.string
+        } else if let raw = try? String(contentsOf: url, encoding: .utf8) {
+            text = raw
+        } else if let data = try? Data(contentsOf: url) {
+            text = String(decoding: data, as: UTF8.self)
+        } else { return }
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let title = url.deletingPathExtension().lastPathComponent
+        if let pdfURL = try? DocumentImporter.makePDF(title: title, text: text) {
+            addGeneratedPDF(at: pdfURL, title: title)
+        }
     }
 
     private func canBookmarkInPlace(_ url: URL) -> Bool {

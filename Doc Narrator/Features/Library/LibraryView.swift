@@ -44,7 +44,7 @@ struct LibraryView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button { vm.isImporting = true } label: { Label("Import PDF", systemImage: "doc") }
+                        Button { vm.isImporting = true } label: { Label("Import File", systemImage: "doc") }
                         Button { showPaste = true } label: { Label("Paste Text", systemImage: "doc.text") }
                         Button { showWeb = true } label: { Label("From Web Link", systemImage: "link") }
                     } label: {
@@ -53,7 +53,7 @@ struct LibraryView: View {
                 }
             }
             .fileImporter(isPresented: $vm.isImporting,
-                          allowedContentTypes: [.pdf],
+                          allowedContentTypes: [.pdf, .plainText, .text, UTType("net.daringfireball.markdown") ?? .plainText, .rtf],
                           allowsMultipleSelection: false) { result in
                 vm.handleImport(result: result)
             }
