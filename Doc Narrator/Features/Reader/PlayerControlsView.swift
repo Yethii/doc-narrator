@@ -67,11 +67,13 @@ struct PlayerControlsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Transport — prev / play-pause / next, centered and symmetric.
-            HStack(spacing: 56) {
-                transportButton("backward.end.fill", size: 26) { vm.skipToPreviousSection() }
+            // Transport — section-back / sentence-back / play-pause / sentence-fwd / section-fwd.
+            HStack(spacing: 10) {
+                transportButton("backward.end.fill", size: 24) { vm.skipToPreviousSection() }
+                transportButton("backward.fill", size: 20) { vm.skipToPreviousSentence() }
                 playPauseButton
-                transportButton("forward.end.fill", size: 26) { vm.skipToNextSection() }
+                transportButton("forward.fill", size: 20) { vm.skipToNextSentence() }
+                transportButton("forward.end.fill", size: 24) { vm.skipToNextSection() }
             }
             .frame(maxWidth: .infinity)
 

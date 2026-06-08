@@ -165,6 +165,24 @@ final class ReaderViewModel: ObservableObject, TTSEngineDelegate {
         if state == .playing { speakCurrentSentence() }
     }
 
+    func skipToNextSentence() {
+        engine.stop(); sectionPauseTask?.cancel()
+        setPosition(flat: min(max(totalSentences - 1, 0), globalSentenceIndex + 1))
+        if state == .playing { speakCurrentSentence() }
+    }
+
+    func skipToPreviousSentence() {
+        engine.stop(); sectionPauseTask?.cancel()
+        setPosition(flat: max(0, globalSentenceIndex - 1))
+        if state == .playing { speakCurrentSentence() }
+    }
+
+    private func setPosition(flat: Int) {
+        guard let (si, sj) = sectionSentence(forFlat: flat) else { return }
+        currentSectionIndex = si; currentSentenceIndex = sj; globalSentenceIndex = flat
+        savePosition()
+    }
+
     // Jump to any section/sentence and immediately start reading from there.
     func jumpTo(sectionIndex: Int, sentenceIndex: Int = 0) {
         engine.stop(); sectionPauseTask?.cancel()
