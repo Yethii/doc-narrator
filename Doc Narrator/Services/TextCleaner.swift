@@ -95,6 +95,14 @@ struct TextCleaner {
                 .replacing(emailRegex, with: "").trimmingCharacters(in: .whitespaces)
             if withoutURLs.isEmpty { continue }
 
+            // Imported Markdown tables are rendered into the PDF as "a | b | c" rows with a
+            // "---+---" separator. Keep those (converted to readable text) instead of letting
+            // isMathJunk drop them as symbol garbage.
+            if isTableSeparatorLine(trimmed) { continue }      // drop the "---+---" rule only
+            if let rowText = tableRowAsText(trimmed) {
+                bodyLines.append(rowText); continue
+            }
+
             // Drop lines that are predominantly math/symbols (equations, variable defs)
             if isMathJunk(trimmed) {
                 tcLog.debug("isMathJunk: '\(trimmed.prefix(80))'")
@@ -114,6 +122,30 @@ struct TextCleaner {
         }
         flush()
         return sections
+    }
+
+    // MARK: - Imported-table handling
+
+    /// The "----+----" / "---|---" rule line under a table header. Drop it (it's not content).
+    private static func isTableSeparatorLine(_ line: String) -> Bool {
+        let letters = line.filter { $0.isLetter }.count
+        let dashes = line.filter { $0 == "-" }.count
+        return letters == 0 && dashes >= 3 && (line.contains("+") || line.contains("|"))
+    }
+
+    /// A monospaced table row like "Name  |  Score" → readable "Name: Score" (or comma-joined).
+    /// Returns nil if the line isn't a table row. Requires at least one pipe and some letters so
+    /// real equations with a single "|" aren't misread as tables.
+    private static func tableRowAsText(_ line: String) -> String? {
+        guard line.contains("|") else { return nil }
+        let cells = line.components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard cells.count >= 2 else { return nil }
+        let letters = line.filter { $0.isLetter }.count
+        guard letters >= 2 else { return nil }
+        // Two cells read naturally as "label: value"; more cells comma-join.
+        return cells.count == 2 ? "\(cells[0]): \(cells[1])." : cells.joined(separator: ", ") + "."
     }
 
     // MARK: - Junk line filter
