@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Shows one summary. Generation runs in a background SummaryGenerator.Job (survives leaving
 /// this page); this view just observes it. Saved summaries display statically.
@@ -84,6 +85,9 @@ private struct LiveSummaryContent: View {
             }
         }
         .toolbar {
+            if !job.text.isEmpty && !job.isGenerating {
+                ToolbarItem(placement: .topBarTrailing) { SummaryShareMenu(markdown: job.text) }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: onRegenerate) { Label("Regenerate", systemImage: "arrow.clockwise") }
                     .disabled(job.isGenerating)
@@ -105,9 +109,27 @@ private struct SavedSummaryContent: View {
             NarrationControlsView(narrator: narrator)
         }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { SummaryShareMenu(markdown: markdown) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: onRegenerate) { Label("Regenerate", systemImage: "arrow.clockwise") }
             }
+        }
+    }
+}
+
+/// Copy / Share menu for a summary. Copies clean plain text; shares the readable text too.
+private struct SummaryShareMenu: View {
+    let markdown: String
+    private var plain: String { Markdown.plainText(markdown) }
+
+    var body: some View {
+        Menu {
+            Button { UIPasteboard.general.string = plain } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: plain) { Label("Share…", systemImage: "square.and.arrow.up") }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
         }
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UIKit
 
 /// A persistent, retrieval-grounded conversation about one paper. ChatGPT/Claude-style:
 /// streamed answers, Markdown-rendered for readability, per-answer read-aloud, history saved
@@ -112,11 +113,12 @@ struct ChatView: View {
     }
 }
 
-/// One message: user (trailing, tinted) or assistant (leading, readable Markdown + read-aloud).
+/// One message: user (trailing, tinted) or assistant (leading, readable Markdown).
+/// All text is selectable/copyable. Chat does NOT use tap-to-speak — text selection is primary;
+/// a single "Read aloud" button plays the whole answer for those who want it.
 private struct MessageBubble: View {
     let message: ChatMessage
     let isStreaming: Bool
-    @StateObject private var narrator = SentenceNarrator()
 
     var body: some View {
         if message.role == .user {
@@ -124,21 +126,22 @@ private struct MessageBubble: View {
                 Spacer(minLength: 40)
                 Text(message.text)
                     .readingStyle()
+                    .textSelection(.enabled)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 16).fill(Color.blue.opacity(0.15)))
             }
         } else {
-            AssistantBubble(message: message, isStreaming: isStreaming, narrator: narrator)
+            AssistantBubble(message: message, isStreaming: isStreaming)
         }
     }
 }
 
-/// Assistant answer rendered inline (no nested ScrollView — that broke layout and read-aloud).
-/// Sentences map 1:1 to the narrator queue: current sentence highlights, tap to jump.
+/// Assistant answer: selectable, copyable Markdown text. A Copy and a Read-aloud button sit
+/// under the answer once it's finished. No per-sentence tap gesture — that fought text selection.
 private struct AssistantBubble: View {
     let message: ChatMessage
     let isStreaming: Bool
-    @ObservedObject var narrator: SentenceNarrator
+    @StateObject private var narrator = SentenceNarrator()
 
     @State private var segments: [TextSegment] = []
 
@@ -146,18 +149,22 @@ private struct AssistantBubble: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
-                    segmentView(seg, index: i)
-                        .contentShape(Rectangle())
-                        .onTapGesture { narrator.jump(to: i) }
+                    segmentView(seg)
                 }
             }
+            .textSelection(.enabled)   // long-press to select & copy any part of the answer
 
             if !isStreaming && !message.text.isEmpty {
-                Button { narrator.toggle() } label: {
-                    Label(narrator.isPlaying ? "Stop" : "Read aloud",
-                          systemImage: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
-                        .font(.caption)
+                HStack(spacing: 8) {
+                    Button { UIPasteboard.general.string = Markdown.plainText(message.text) } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    Button { narrator.toggle() } label: {
+                        Label(narrator.isPlaying ? "Stop" : "Read aloud",
+                              systemImage: narrator.isPlaying ? "stop.fill" : "speaker.wave.2.fill")
+                    }
                 }
+                .font(.caption)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
@@ -177,8 +184,7 @@ private struct AssistantBubble: View {
     }
 
     @ViewBuilder
-    private func segmentView(_ seg: TextSegment, index: Int) -> some View {
-        let isCurrent = index == narrator.currentIndex
+    private func segmentView(_ seg: TextSegment) -> some View {
         Group {
             switch seg.kind {
             case .heading:
@@ -194,11 +200,7 @@ private struct AssistantBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isCurrent ? Color.yellow.opacity(0.28) : .clear)
-        )
+        .padding(.vertical, 2)
     }
 }
 

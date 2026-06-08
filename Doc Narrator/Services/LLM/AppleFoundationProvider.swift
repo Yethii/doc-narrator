@@ -1,7 +1,10 @@
 import Foundation
+import os
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+
+private let llmLog = Logger(subsystem: "in.lyr.Doc-Narrator", category: "AppleLLM")
 
 /// Apple's built-in on-device language model (iOS 26+ Foundation Models).
 /// No model download, runs fully on device. Requires an Apple-Intelligence-capable device
@@ -36,6 +39,10 @@ final class AppleFoundationProvider: LLMProvider {
             if #available(iOS 26.0, *) {
                 let t = Task {
                     do {
+                        // Log exactly what Apple FM receives so we can see if the paper text is
+                        // actually reaching the model (vs. being dropped/truncated).
+                        llmLog.debug("Apple FM request — instructions: \(request.system.count, privacy: .public) chars, prompt: \(request.user.count, privacy: .public) chars, maxOut: \(request.maxTokens, privacy: .public)")
+                        llmLog.debug("Prompt head: \(request.user.prefix(300), privacy: .public)")
                         let session = LanguageModelSession(instructions: request.system)
                         let options = GenerationOptions(temperature: request.temperature,
                                                         maximumResponseTokens: request.maxTokens)
@@ -53,10 +60,12 @@ final class AppleFoundationProvider: LLMProvider {
                             }
                             previous = snapshot
                         }
+                        llmLog.debug("Apple FM done — \(previous.count, privacy: .public) chars out. Head: \(previous.prefix(200), privacy: .public)")
                         continuation.finish()
                     } catch is CancellationError {
                         continuation.finish(throwing: LLMError.cancelled)
                     } catch let genErr as LanguageModelSession.GenerationError {
+                        llmLog.error("Apple FM GenerationError: \(String(describing: genErr), privacy: .public)")
                         continuation.finish(throwing: Self.mapGenerationError(genErr))
                     } catch {
                         continuation.finish(throwing: error)

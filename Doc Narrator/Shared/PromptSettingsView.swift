@@ -38,14 +38,23 @@ struct PromptSettingsView: View {
             )
 
             Section {
-                DisclosureGroup("Advanced (map / fold)", isExpanded: $showAdvanced) {
-                    promptBody(title: "Map — condense one chunk",
+                DisclosureGroup("Advanced: long-document steps", isExpanded: $showAdvanced) {
+                    Text("A long paper is too big to summarize in one pass, so the app does it in stages. These two prompts control the early stages; the final result still uses the ‘General summary’ or ‘Custom summary’ prompt above. You usually don’t need to touch these.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+
+                    promptBody(title: "Step 1 — Summarize each part",
                                text: $llm.prompts.map, defaultValue: defaults.map)
-                    promptBody(title: "Fold — combine chunk summaries",
+                    Text("Run on each section of a long paper to shorten it first.")
+                        .font(.caption2).foregroundStyle(.secondary)
+
+                    promptBody(title: "Step 2 — Merge the part-summaries",
                                text: $llm.prompts.fold, defaultValue: defaults.fold)
+                    Text("Combines the Step 1 results when there are still too many to fit. The merged text then goes to the final summary prompt above.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("Long papers are summarized in chunks (‘map’), whose results are combined (‘fold’) before the final summary prompt runs. Most users won’t need to change these.")
+                Text("These only run on long documents. Short ones are summarized directly with the prompts above.")
             }
 
             Section {
