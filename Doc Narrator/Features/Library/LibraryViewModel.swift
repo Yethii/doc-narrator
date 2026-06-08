@@ -57,8 +57,11 @@ final class LibraryViewModel: ObservableObject {
             importError = "That file has no readable text."; return
         }
         let title = url.deletingPathExtension().lastPathComponent
+        let isMarkdown = ext == "md" || ext == "markdown" || ext == "mdown"
         do {
-            let pdfURL = try DocumentImporter.makePDF(title: title, text: text)
+            let pdfURL = isMarkdown
+                ? try DocumentImporter.makePDF(title: title, markdown: text)
+                : try DocumentImporter.makePDF(title: title, text: text)
             store.addGeneratedPDF(at: pdfURL, title: title)
         } catch {
             importError = (error as? LocalizedError)?.errorDescription ?? "Couldn't import that file."

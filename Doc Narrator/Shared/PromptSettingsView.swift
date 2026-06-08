@@ -43,12 +43,12 @@ struct PromptSettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .padding(.vertical, 4)
 
-                    promptBody(title: "Step 1 — Summarize each part",
+                    promptBody(title: "Step 1: Summarize each part",
                                text: $llm.prompts.map, defaultValue: defaults.map)
                     Text("Run on each section of a long paper to shorten it first.")
                         .font(.caption2).foregroundStyle(.secondary)
 
-                    promptBody(title: "Step 2 — Merge the part-summaries",
+                    promptBody(title: "Step 2: Merge the part-summaries",
                                text: $llm.prompts.fold, defaultValue: defaults.fold)
                     Text("Combines the Step 1 results when there are still too many to fit. The merged text then goes to the final summary prompt above.")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -79,7 +79,7 @@ struct PromptSettingsView: View {
         return """
         How chat context works: for each question, the app finds the most relevant sections of \
         the paper (semantic search) and includes up to ~\(budget) characters of them, plus the \
-        last 6 messages of the conversation — a rolling window. Older turns scroll out of the \
+        last 6 messages of the conversation (a rolling window). Older turns scroll out of the \
         model’s view (the full history is still saved on device). The window is sized to the \
         active model: \(model) is selected now. Apple’s model has a small ~4k-token limit, so it \
         gets a tighter window than Gemma to avoid overflow.

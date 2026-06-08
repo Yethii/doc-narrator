@@ -65,7 +65,7 @@ private struct LiveSummaryContent: View {
                 if job.isGenerating {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("Generating on device — you can leave this page; you'll be notified when it's ready.")
+                        Text("Generating on device. You can leave this page; you'll be notified when it's ready.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

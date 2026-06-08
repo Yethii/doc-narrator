@@ -74,7 +74,7 @@ struct ChatView: View {
                 .font(.largeTitle).foregroundStyle(.secondary)
             Text("Ask anything about this document.")
                 .font(.headline)
-            Text("Answers are grounded in the paper's text — nothing leaves your device.")
+            Text("Answers are grounded in the paper's text. Nothing leaves your device.")
                 .font(.footnote).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

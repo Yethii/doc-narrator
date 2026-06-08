@@ -75,7 +75,7 @@ struct IntelligenceHomeView: View {
             }
 
             Section {
-                Label("Podcast — coming soon", systemImage: "waveform")
+                Label("Podcast (coming soon)", systemImage: "waveform")
                     .foregroundStyle(.secondary)
             }
         }
@@ -111,7 +111,7 @@ struct IntelligenceHomeView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.title).font(.headline).lineLimit(1)
-                Text(job.error == nil ? "Generating…" : "Failed — tap to retry")
+                Text(job.error == nil ? "Generating…" : "Failed. Tap to retry")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

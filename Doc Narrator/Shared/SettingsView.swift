@@ -12,7 +12,7 @@ struct SettingsView: View {
     @ViewBuilder private var gemmaModelRow: some View {
         if gemma.isDownloaded {
             HStack {
-                Label("\(gemma.modelName) — installed", systemImage: "checkmark.circle.fill")
+                Label("\(gemma.modelName) installed", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 Spacer()
                 Button("Delete", role: .destructive) { gemma.deleteModel() }
@@ -78,7 +78,7 @@ struct SettingsView: View {
                         }
                     }
                     if llm.settings.providerType == .appleFoundation {
-                        Label("Apple Intelligence works well for summaries but can be unreliable in Chat with PDF — it sometimes ignores the document. For chat, Gemma (on-device) is more accurate.",
+                        Label("Apple Intelligence works well for summaries but can be unreliable in Chat with PDF, where it sometimes ignores the document. For chat, Gemma (on-device) is more accurate.",
                               systemImage: "exclamationmark.circle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -156,8 +156,8 @@ struct SettingsView: View {
         let region = Locale.current.localizedString(forRegionCode: String(voice.language.suffix(2)))
         let base = region.map { "\(voice.name) · \($0)" } ?? voice.name
         switch voice.quality {
-        case .premium:  return "\(base) — Premium"
-        case .enhanced: return "\(base) — Enhanced"
+        case .premium:  return "\(base) · Premium"
+        case .enhanced: return "\(base) · Enhanced"
         default:        return base
         }
     }

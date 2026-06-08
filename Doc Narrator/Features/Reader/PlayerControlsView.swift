@@ -27,7 +27,7 @@ struct PlayerControlsView: View {
             if generator.isGenerating {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.mini)
-                    Text("Generating summary — narration will resume when it's ready.")
+                    Text("Generating summary. Narration will resume when it's ready.")
                         .font(.caption2)
                         .foregroundStyle(bannerFlash ? .primary : .secondary)
                 }

@@ -24,7 +24,21 @@ enum DocumentImporter {
     static func makePDF(title: String, text: String) throws -> URL {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { throw ImportError.emptyText }
-        guard let url = renderPDF(title: title, body: body) else { throw ImportError.pdfFailed }
+        let attr = bodyAttributedString(plain: body)
+        guard let url = renderPDF(title: title, content: attr) else { throw ImportError.pdfFailed }
+        return url
+    }
+
+    // MARK: - Markdown → formatted PDF
+
+    /// Render Markdown into a PROPERLY FORMATTED PDF: real headings, bold, and bullets, with all
+    /// Markdown syntax (`#`, `**`, `-`, escapes) removed — so the page looks like a document and
+    /// the narrator never reads "asterisk asterisk" or stray backslashes.
+    static func makePDF(title: String, markdown: String) throws -> URL {
+        let body = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { throw ImportError.emptyText }
+        let attr = markdownAttributedString(body)
+        guard let url = renderPDF(title: title, content: attr) else { throw ImportError.pdfFailed }
         return url
     }
 
@@ -60,13 +74,105 @@ enum DocumentImporter {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ImportError.noReadableContent
         }
-        guard let url = renderPDF(title: title, body: text) else { throw ImportError.pdfFailed }
+        guard let url = renderPDF(title: title, content: bodyAttributedString(plain: text)) else {
+            throw ImportError.pdfFailed
+        }
         return (url, title)
     }
 
     // MARK: - PDF rendering (paginated via Core Text)
 
-    private static func renderPDF(title: String, body: String) -> URL? {
+    /// Plain body text as an attributed string (no Markdown interpretation).
+    private static func bodyAttributedString(plain: String) -> NSAttributedString {
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 4; para.paragraphSpacing = 10
+        return NSAttributedString(string: plain, attributes: [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.black,
+            .paragraphStyle: para
+        ])
+    }
+
+    /// Convert Markdown to a styled attributed string: ATX headings become bold/larger, `**bold**`
+    /// becomes bold, list markers become real bullets, and Markdown punctuation/escapes are
+    /// stripped. Inline emphasis is handled per line so the result reads cleanly.
+    private static func markdownAttributedString(_ markdown: String) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let bodyPara = NSMutableParagraphStyle()
+        bodyPara.lineSpacing = 4; bodyPara.paragraphSpacing = 10
+        let headingPara = NSMutableParagraphStyle()
+        headingPara.lineSpacing = 4; headingPara.paragraphSpacing = 6; headingPara.paragraphSpacingBefore = 12
+
+        for rawLine in markdown.components(separatedBy: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { out.append(NSAttributedString(string: "\n")); continue }
+
+            // Headings: # .. ######
+            if let m = line.range(of: #"^(#{1,6})\s+"#, options: .regularExpression) {
+                let depth = min(max(line.prefix(while: { $0 == "#" }).count, 1), 6)
+                let text = stripInlineMarkdown(String(line[m.upperBound...]))
+                let size: CGFloat = depth <= 1 ? 20 : depth == 2 ? 18 : 16
+                out.append(NSAttributedString(string: text + "\n", attributes: [
+                    .font: UIFont.systemFont(ofSize: size, weight: .bold),
+                    .foregroundColor: UIColor.black,
+                    .paragraphStyle: headingPara
+                ]))
+                continue
+            }
+
+            // List items: -, *, +, or "1." → bullet
+            if line.range(of: #"^([-*+]|\d+[.)])\s+"#, options: .regularExpression) != nil {
+                let text = stripInlineMarkdown(line.replacingOccurrences(
+                    of: #"^([-*+]|\d+[.)])\s+"#, with: "", options: .regularExpression))
+                out.append(styledInline("•  " + text + "\n", base: bodyPara))
+                continue
+            }
+
+            out.append(styledInline(stripInlineMarkdown(line) + "\n", base: bodyPara))
+        }
+        return out
+    }
+
+    /// Build an attributed line, rendering **bold** / __bold__ spans as bold; everything else
+    /// body weight. Markdown markers themselves are removed.
+    private static func styledInline(_ line: String, base: NSParagraphStyle) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let body = UIFont.systemFont(ofSize: 15)
+        let bold = UIFont.boldSystemFont(ofSize: 15)
+        let scanner = line as NSString
+        let boldRegex = try? NSRegularExpression(pattern: #"(\*\*|__)(.+?)\1"#)
+        var cursor = 0
+        let full = NSRange(location: 0, length: scanner.length)
+        let matches = boldRegex?.matches(in: line, range: full) ?? []
+        func append(_ s: String, font: UIFont) {
+            result.append(NSAttributedString(string: s, attributes: [
+                .font: font, .foregroundColor: UIColor.black, .paragraphStyle: base]))
+        }
+        for m in matches {
+            if m.range.location > cursor {
+                append(scanner.substring(with: NSRange(location: cursor, length: m.range.location - cursor)), font: body)
+            }
+            append(scanner.substring(with: m.range(at: 2)), font: bold)
+            cursor = m.range.location + m.range.length
+        }
+        if cursor < scanner.length {
+            append(scanner.substring(with: NSRange(location: cursor, length: scanner.length - cursor)), font: body)
+        }
+        return result
+    }
+
+    /// Remove inline Markdown punctuation and escapes that shouldn't be shown or spoken.
+    private static func stripInlineMarkdown(_ s: String) -> String {
+        var t = s
+        t = t.replacingOccurrences(of: #"`([^`]*)`"#, with: "$1", options: .regularExpression)   // code
+        t = t.replacingOccurrences(of: #"!\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression) // image
+        t = t.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)  // link
+        t = t.replacingOccurrences(of: #"(\*\*|\*|__|_|~~)"#, with: "", options: .regularExpression)        // emphasis
+        t = t.replacingOccurrences(of: #"\\([\\`*_{}\[\]()#+\-.!>])"#, with: "$1", options: .regularExpression) // escapes \. \- etc.
+        return t.trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func renderPDF(title: String, content: NSAttributedString) -> URL? {
         let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792)   // US Letter
         let margin: CGFloat = 54
         let textRect = pageRect.insetBy(dx: margin, dy: margin)
@@ -79,14 +185,11 @@ enum DocumentImporter {
         if !cleanTitle.isEmpty {
             attr.append(NSAttributedString(string: cleanTitle + "\n\n", attributes: [
                 .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+                .foregroundColor: UIColor.black,
                 .paragraphStyle: para
             ]))
         }
-        attr.append(NSAttributedString(string: body, attributes: [
-            .font: UIFont.systemFont(ofSize: 15),
-            .foregroundColor: UIColor.black,
-            .paragraphStyle: para
-        ]))
+        attr.append(content)
 
         let framesetter = CTFramesetterCreateWithAttributedString(attr as CFAttributedString)
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect)

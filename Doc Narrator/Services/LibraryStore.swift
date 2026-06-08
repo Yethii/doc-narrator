@@ -157,9 +157,12 @@ final class LibraryStore: ObservableObject {
 
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let title = url.deletingPathExtension().lastPathComponent
-        if let pdfURL = try? DocumentImporter.makePDF(title: title, text: text) {
-            addGeneratedPDF(at: pdfURL, title: title)
-        }
+        let ext = url.pathExtension.lowercased()
+        let isMarkdown = ext == "md" || ext == "markdown" || ext == "mdown"
+        let pdfURL = isMarkdown
+            ? try? DocumentImporter.makePDF(title: title, markdown: text)
+            : try? DocumentImporter.makePDF(title: title, text: text)
+        if let pdfURL { addGeneratedPDF(at: pdfURL, title: title) }
     }
 
     private func canBookmarkInPlace(_ url: URL) -> Bool {
